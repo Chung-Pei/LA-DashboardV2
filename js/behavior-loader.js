@@ -18,7 +18,20 @@ const BehaviorLoader = (() => {
     if (_cache[key]) return _cache[key];
     const res = await fetch(url);
     if (!res.ok) throw new Error(`載入失敗：${url}（${res.status}）`);
-    _cache[key] = await res.json();
+    const text = await res.text();
+    try {
+      _cache[key] = JSON.parse(text);
+    } catch (err) {
+      const cleaned = text
+        .replace(/:\s*(NaN|-?Infinity)(?=\s*[,}])/g, ": null")
+        .replace(/([\[,]\s*)(NaN|-?Infinity)(?=\s*[,\]])/g, "$1null");
+      try {
+        _cache[key] = JSON.parse(cleaned);
+        console.warn(`JSON ${url} contains non-standard NaN/Infinity values; converted them to null.`);
+      } catch (_cleanErr) {
+        throw err;
+      }
+    }
     return _cache[key];
   }
 
