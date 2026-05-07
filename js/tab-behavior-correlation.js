@@ -42,6 +42,13 @@ const BehaviorCorrelationTab = (() => {
   let _scatterChart = null;
   let _currentTarget = null;
 
+  // ── 篩選狀態 ─────────────────────────────────────────────
+  let _allScatterData   = null;   // 全量 scatter_data（篩選的基底）
+  let _behaviorByMasked = null;   // masked_id → behavior student（用於 join cluster）
+  let _allSemesters     = [];     // 可用學期列表
+  let _filterSemester   = "all";  // 目前學期篩選
+  let _filterCluster    = "all";  // 目前分群篩選
+
   function _targets() {
     const explicit = _corrData?.targets || _corrData?.grades;
     if (explicit?.length) return explicit;
@@ -244,17 +251,164 @@ const BehaviorCorrelationTab = (() => {
   async function init(heatmapId = "corrHeatmap", scatterWrapperId = "scatterSection") {
     BehaviorLoader.setLoading("tab-correlation", true);
     try {
-      _corrData = await BehaviorLoader.load.correlation();
+      // 同步載入 correlation + behavior（用於分群 join）
+      const [corrRaw, behaviorData] = await Promise.all([
+        BehaviorLoader.load.correlation(),
+        BehaviorLoader.load.behavior().catch(() => null),
+      ]);
+
+      _corrData = corrRaw;
       if (!_hasUsableCorrelation(_corrData)) {
         _corrData = await _rebuildCorrelationFromMainData(_corrData);
       }
-      _renderHeatmap(heatmapId);
-      _renderScatterSelector(scatterWrapperId);
+
+      // 建立 masked_id → behavior student 索引（取得 cluster）
+      const bStudents = behaviorData?.students || [];
+      _behaviorByMasked = new Map(bStudents.map(s => [s.masked_id, s]));
+
+      // 備份全量並 join cluster 欄位
+      const raw = _corrData?.scatter_data || [];
+      _allScatterData = Array.isArray(raw)
+        ? raw.map(row => ({
+            ...row,
+            cluster: row.cluster || _behaviorByMasked.get(row.masked_id)?.cluster || "",
+            semester: row.semester || "",
+          }))
+        : raw;
+
+      // 收集可用學期（從 meta）
+      _allSemesters = Array.isArray(_corrData?.meta?.semesters)
+        ? _corrData.meta.semesters
+        : (behaviorData?.meta?.semesters || []);
+
+      _filterSemester = "all";
+      _filterCluster  = "all";
+
+      _renderFilterBar(heatmapId);
+      _applyFiltersAndRender(heatmapId, scatterWrapperId);
     } catch (err) {
       BehaviorLoader.showError("tab-correlation", err.message);
     } finally {
       BehaviorLoader.setLoading("tab-correlation", false);
     }
+  }
+
+  // ── 篩選列 ───────────────────────────────────────────────
+
+  function _formatSemLabel(sem) {
+    const s = String(sem || "").trim();
+    const m = s.match(/^(\d{3})-?([12])$/);
+    return m ? `${m[1]}(${m[2]})` : s;
+  }
+
+  const CLUSTER_NAMES_CORR = {
+    P1: "影音輔導型", P2: "彈性聽覺型", P3: "平均使用型",
+    P4: "題庫刷題型", P5: "被動低參與型",
+  };
+
+  function _renderFilterBar(insertBeforeId) {
+    const anchor = document.getElementById(insertBeforeId);
+    if (!anchor) return;
+
+    // 避免重複插入
+    const existing = document.getElementById("corrFilterBar");
+    if (existing) { existing.remove(); }
+
+    const semOptions = [
+      `<option value="all">全部年度</option>`,
+      ..._allSemesters.map(s => `<option value="${s}">${_formatSemLabel(s)}</option>`),
+    ].join("");
+
+    const clusterOptions = [
+      `<option value="all">全部分群</option>`,
+      ...Object.entries(CLUSTER_NAMES_CORR).map(([k, n]) =>
+        `<option value="${k}">${k} ${n}</option>`
+      ),
+    ].join("");
+
+    const bar = document.createElement("div");
+    bar.id = "corrFilterBar";
+    bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#f8f9fa)";
+    bar.innerHTML = `
+      <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
+      <div style="display:flex;align-items:center;gap:5px">
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">年度</label>
+        <select id="corrSemFilter"
+                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer"
+                onchange="BehaviorCorrelationTab.onFilterChange()">
+          ${semOptions}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">分群</label>
+        <select id="corrClusterFilter"
+                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer"
+                onchange="BehaviorCorrelationTab.onFilterChange()">
+          ${clusterOptions}
+        </select>
+      </div>
+      <span id="corrFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>`;
+
+    anchor.parentNode.insertBefore(bar, anchor);
+  }
+
+  function onFilterChange() {
+    _filterSemester = document.getElementById("corrSemFilter")?.value || "all";
+    _filterCluster  = document.getElementById("corrClusterFilter")?.value || "all";
+    _applyFiltersAndRender("corrHeatmap", "scatterSection");
+  }
+
+  // ── 取得篩選後資料 ────────────────────────────────────────
+
+  function _filteredScatterData() {
+    const raw = _allScatterData;
+    if (!Array.isArray(raw)) return raw;
+    return raw.filter(row => {
+      if (_filterSemester !== "all") {
+        const rowSem = String(row.semester || "").replace(/-/g,"");
+        const selSem = String(_filterSemester).replace(/-/g,"");
+        if (rowSem && rowSem !== selSem) return false;
+        // 若 scatter_data 本身無 semester，不過濾（data 是跨年彙總）
+      }
+      if (_filterCluster !== "all") {
+        if ((row.cluster || "") !== _filterCluster) return false;
+      }
+      return true;
+    });
+  }
+
+  function _applyFiltersAndRender(heatmapId, scatterWrapperId) {
+    const filtered = _filteredScatterData();
+    const count = Array.isArray(filtered) ? filtered.length : "—";
+
+    // 更新人數標示
+    const countEl = document.getElementById("corrFilterCount");
+    const semHasSemesterField = Array.isArray(_allScatterData) &&
+      _allScatterData.some(r => r.semester);
+    const semNote = (_filterSemester !== "all" && !semHasSemesterField)
+      ? "（年度欄位尚未由 ETL 產出，篩選無效）"
+      : "";
+    if (countEl) countEl.textContent = `共 ${count} 筆${semNote}`;
+
+    // 用篩選後資料重建 pearson
+    const features = _features();
+    const targets  = _targets();
+    if (Array.isArray(filtered) && filtered.length >= 5) {
+      const pearson = {};
+      targets.forEach(target => {
+        pearson[target] = {};
+        features.forEach(feat => {
+          pearson[target][feat] = _pearsonValue(filtered, feat, target);
+        });
+      });
+      _corrData = { ..._corrData, pearson, scatter_data: filtered };
+    } else {
+      // 人數不足時，仍用原始 pearson 但更新 scatter_data
+      _corrData = { ..._corrData, scatter_data: filtered };
+    }
+
+    _renderHeatmap(heatmapId);
+    _renderScatterSelector(scatterWrapperId);
   }
 
   // ── Pearson 熱力圖（HTML table + 色彩映射）────────────────
@@ -451,5 +605,5 @@ const BehaviorCorrelationTab = (() => {
     });
   }
 
-  return { init, showScatter };
+  return { init, showScatter, onFilterChange };
 })();

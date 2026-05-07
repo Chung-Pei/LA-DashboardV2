@@ -46,6 +46,9 @@ const BehaviorRadarTab = (() => {
   let _radarData  = null;
   let _behaviorMeta = {};
   let _behaviorStudents = [];
+  let _allStudents = [];      // 全量學生（用於年度篩選）
+  let _allSemesters = [];     // 所有可用學期列表
+  let _selectedSemester = "all"; // 目前選擇的學期
 
   function _dimensions() {
     const explicit = _radarData?.dimensions || _radarData?.meta?.dimensions;
@@ -177,6 +180,12 @@ const BehaviorRadarTab = (() => {
       _radarData = radarData;
       _behaviorMeta = behaviorData?.meta || {};
       _behaviorStudents = behaviorData?.students || [];
+      _allStudents = _behaviorStudents;
+      // 收集所有學期（從 meta.semesters 或學生資料）
+      _allSemesters = Array.isArray(_behaviorMeta.semesters) && _behaviorMeta.semesters.length
+        ? [..._behaviorMeta.semesters]
+        : [];
+      _selectedSemester = "all";
       _renderBehaviorMetaStrip();
       _renderControls(controlsId);
       renderClusterView(canvasId, Object.keys(CLUSTER_NAMES));
@@ -193,6 +202,33 @@ const BehaviorRadarTab = (() => {
     const el = document.getElementById(containerId);
     if (!el) return;
 
+    // ── 年度選擇器 ──
+    const semOptions = [
+      `<option value="all">全部年度（${(_behaviorMeta.semester_range_label || _behaviorMeta.semester_range || "—")}）</option>`,
+      ..._allSemesters.map(s => `<option value="${s}">${_formatSemester(s)}</option>`),
+    ].join("");
+
+    const yearSelector = _allSemesters.length
+      ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+           <span style="font-size:.8rem;color:var(--text-dim,#888);white-space:nowrap">選擇年度：</span>
+           <select id="behaviorYearSelect"
+                   style="font-size:.82rem;padding:4px 8px;border-radius:8px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer"
+                   onchange="BehaviorRadarTab.onYearChange(this.value)">
+             ${semOptions}
+           </select>
+         </div>`
+      : "";
+
+    // ── 顯示模式按鈕（先放，邏輯主開關）──
+    const viewBtns = `
+      <div class="behavior-view-toggle" role="group" aria-label="雷達圖顯示模式" style="margin-bottom:8px">
+        <button class="behavior-view-btn active" id="btnViewCluster"
+                onclick="BehaviorRadarTab.switchView('cluster')">依分群</button>
+        <button class="behavior-view-btn" id="btnViewPassFail"
+                onclick="BehaviorRadarTab.switchView('passfail')">及格/不及格</button>
+      </div>`;
+
+    // ── P1–P5 分群篩選按鈕（依分群模式下才顯示）──
     const clusterBtns = Object.entries(CLUSTER_NAMES).map(([key, name]) => `
       <button class="cluster-toggle active"
               data-cluster="${key}"
@@ -202,79 +238,54 @@ const BehaviorRadarTab = (() => {
         <span>${name}</span>
       </button>`).join("");
 
-    const viewBtns = `
-      <div class="behavior-view-toggle" role="group" aria-label="雷達圖顯示模式">
-        <button class="behavior-view-btn active" id="btnViewCluster"
-                onclick="BehaviorRadarTab.switchView('cluster')">依分群</button>
-        <button class="behavior-view-btn" id="btnViewPassFail"
-                onclick="BehaviorRadarTab.switchView('passfail')">及格/不及格</button>
-      </div>`;
-
     el.innerHTML = `
       <style>
         #${containerId} .behavior-control-panel {
           display:flex;
-          flex-wrap:wrap;
-          align-items:center;
-          gap:10px;
-          padding:12px;
-          border:1px solid rgba(110,130,165,.22);
-          border-radius:10px;
-          background:var(--card-bg2,#f8f9fa);
+          flex-direction:column;
+          gap:4px;
         }
-        #${containerId} .behavior-control-label {
-          color:var(--text-mid,#4f5f78);
-          font-weight:700;
-          font-size:.9rem;
-          margin-right:2px;
+        #${containerId} .cluster-panel {
+          display:flex;
+          flex-wrap:wrap;
+          gap:6px;
+          margin-top:4px;
         }
         #${containerId} .cluster-toggle {
           display:inline-flex;
           align-items:center;
-          gap:6px;
-          min-height:36px;
-          padding:7px 12px;
-          border:2px solid var(--cluster-color);
-          border-radius:999px;
-          background:#fff;
+          gap:5px;
+          padding:4px 10px;
+          border-radius:20px;
+          border:1.5px solid var(--cluster-color);
+          background:transparent;
           color:var(--cluster-color);
-          font-size:.9rem;
-          font-weight:700;
-          line-height:1;
+          font-size:.78rem;
           cursor:pointer;
-          transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
-        }
-        #${containerId} .cluster-toggle:hover {
-          transform:translateY(-1px);
-          box-shadow:0 6px 16px rgba(20,35,60,.12);
+          transition:background .15s,color .15s;
+          font-family:inherit;
         }
         #${containerId} .cluster-toggle.active {
           background:var(--cluster-bg);
-          box-shadow:inset 0 0 0 999px rgba(255,255,255,.18);
         }
         #${containerId} .cluster-code {
+          font-weight:700;
           font-family:'JetBrains Mono','Courier New',monospace;
-          font-weight:800;
         }
         #${containerId} .behavior-view-toggle {
           display:inline-flex;
-          align-items:center;
-          gap:4px;
-          padding:3px;
-          border:1px solid rgba(110,130,165,.28);
-          border-radius:999px;
-          background:#fff;
+          border-radius:8px;
+          overflow:hidden;
+          border:1px solid var(--accent,#3498db);
         }
         #${containerId} .behavior-view-btn {
-          min-height:32px;
-          padding:6px 12px;
-          border:0;
-          border-radius:999px;
+          padding:5px 14px;
+          border:none;
           background:transparent;
-          color:var(--text-mid,#4f5f78);
-          font-size:.86rem;
-          font-weight:700;
+          color:var(--accent,#3498db);
           cursor:pointer;
+          font-size:.82rem;
+          font-family:inherit;
         }
         #${containerId} .behavior-view-btn.active {
           background:var(--accent,#3498db);
@@ -282,22 +293,41 @@ const BehaviorRadarTab = (() => {
         }
       </style>
       <div class="behavior-control-panel">
-        <span class="behavior-control-label">顯示分群</span>
-        ${clusterBtns}
+        ${yearSelector}
         ${viewBtns}
+        <div class="cluster-panel" id="clusterBtnPanel">
+          ${clusterBtns}
+        </div>
       </div>`;
   }
-
   // ── 切換顯示模式 ──────────────────────────────────────────
 
   function switchView(mode) {
     document.getElementById("btnViewCluster")?.classList.toggle("active", mode === "cluster");
     document.getElementById("btnViewPassFail")?.classList.toggle("active", mode === "passfail");
+    // 依分群模式才顯示 P1-P5 按鈕
+    const clusterPanel = document.getElementById("clusterBtnPanel");
+    if (clusterPanel) clusterPanel.style.display = mode === "cluster" ? "flex" : "none";
     if (mode === "cluster") {
       renderClusterView("radarChart", Object.keys(CLUSTER_NAMES));
     } else {
       renderPassFailView("radarChart");
     }
+  }
+
+  function onYearChange(semester) {
+    _selectedSemester = semester;
+    if (semester === "all") {
+      _behaviorStudents = _allStudents;
+    } else {
+      // 從 behavior.json 中找有 semester 欄位的學生；若無則用全量（radar_chart_data 是跨年彙總）
+      _behaviorStudents = _allStudents.filter(s =>
+        String(s.semester || s.features?.semester || "").replace(/-/g,"") === String(semester).replace(/-/g,"")
+      );
+    }
+    // 用篩選後的學生重新計算 pass/fail count，然後重繪
+    const activeMode = document.getElementById("btnViewPassFail")?.classList.contains("active") ? "passfail" : "cluster";
+    switchView(activeMode);
   }
 
   function toggleCluster(key, btn) {
@@ -422,8 +452,8 @@ const BehaviorRadarTab = (() => {
             },
           },
           tooltip: {
-            mode: "index",
-            intersect: false,
+            mode: "nearest",
+            intersect: true,
             callbacks: {
               title: ctx => ctx.length ? `📊 ${ctx[0].label}` : "",
               label: ctx => ` ${ctx.dataset.label.split("（")[0]}：${(ctx.raw * 100).toFixed(1)}%`,
@@ -492,5 +522,5 @@ const BehaviorRadarTab = (() => {
       </div>`;
   }
 
-  return { init, switchView, toggleCluster, renderClusterSummary };
+  return { init, switchView, toggleCluster, renderClusterSummary, onYearChange };
 })();
