@@ -7,7 +7,7 @@
 const BehaviorLoader = (() => {
   // ── 快取 ──────────────────────────────────────────────────
   const _cache = {};
-  const DATA_VERSION = "20260507h";
+  const DATA_VERSION = "20260507i";
 
   function _withCacheBust(url) {
     const sep = url.includes("?") ? "&" : "?";

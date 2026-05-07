@@ -214,9 +214,10 @@ const BehaviorTimeTab = (() => {
     const classAvg = _classAvgTime();
     const rows = _preExamRows();
     const totalStudents = rows.length || ((_timeData.students || []).length);
-    const avgPreMidterm = classAvg.avg_pre_midterm_7d_minutes ?? _avg(rows.map(s => s.preMidterm));
-    const avgPreFinal   = classAvg.avg_pre_final_7d_minutes   ?? _avg(rows.map(s => s.preFinal));
+    const avgPreMidterm = _avg(rows.map(s => s.preMidterm));
+    const avgPreFinal   = _avg(rows.map(s => s.preFinal));
     const avgWeekly     = classAvg.avg_weekly_minutes ?? _regularWeeklyAverage(rows);
+    const activeCount = rows.filter(s => s.totalMinutes > 0).length;
     const midCount = rows.filter(s => s.preMidterm > 0).length;
     const finCount = rows.filter(s => s.preFinal > 0).length;
     const anyCount = rows.filter(s => s.preMidterm > 0 || s.preFinal > 0).length;
@@ -231,6 +232,10 @@ const BehaviorTimeTab = (() => {
       { label: "其餘週均學習時間", value: avgWeekly || 0, count: totalStudents, pct: totalStudents ? 100 : 0 },
     ];
     const regularAvg = preExam[2].value;
+    _renderPreExamSummary(canvas, {
+      totalStudents, activeCount, midCount, finCount, anyCount, onlyAnyCount,
+      pct, avgPreMidterm, avgPreFinal, avgWeekly,
+    });
 
     if (_charts.preExam) { _charts.preExam.destroy(); }
 
@@ -310,12 +315,43 @@ const BehaviorTimeTab = (() => {
       const features = s.features || {};
       const profile = s.time_profile || {};
       return {
-        preMidterm: _num(timeRow.pre_midterm_7d_minutes ?? profile.pre_midterm_7d_minutes),
-        preFinal: _num(timeRow.pre_final_7d_minutes ?? profile.pre_final_7d_minutes),
-        totalMinutes: _num(timeRow.total_learning_minutes ?? features.total_learning_minutes),
-        activeWeeks: _num(timeRow.active_weeks ?? profile.active_weeks),
+        preMidterm: _num(profile.pre_midterm_7d_minutes ?? timeRow.pre_midterm_7d_minutes),
+        preFinal: _num(profile.pre_final_7d_minutes ?? timeRow.pre_final_7d_minutes),
+        totalMinutes: _num(features.total_learning_minutes ?? timeRow.total_learning_minutes),
+        activeWeeks: _num(profile.active_weeks ?? timeRow.active_weeks),
       };
     });
+  }
+
+  function _renderPreExamSummary(canvas, stats) {
+    const card = canvas.closest(".chart-card") || canvas.parentElement;
+    if (!card) return;
+    let el = card.querySelector(".pre-exam-summary");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "pre-exam-summary";
+      card.appendChild(el);
+    }
+    const items = [
+      ["總分析人數", `${stats.totalStudents.toLocaleString()} 人`],
+      ["有任何學習紀錄", `${stats.activeCount.toLocaleString()} 人 (${stats.pct(stats.activeCount).toFixed(1)}%)`],
+      ["期中考前 7 天有時數", `${stats.midCount.toLocaleString()} 人 (${stats.pct(stats.midCount).toFixed(1)}%)`],
+      ["期末考前 7 天有時數", `${stats.finCount.toLocaleString()} 人 (${stats.pct(stats.finCount).toFixed(1)}%)`],
+      ["任一考前 7 天有時數", `${stats.anyCount.toLocaleString()} 人 (${stats.pct(stats.anyCount).toFixed(1)}%)`],
+      ["只在考前 7 天才有時數", `${stats.onlyAnyCount.toLocaleString()} 人 (${stats.pct(stats.onlyAnyCount).toFixed(1)}%)`],
+    ];
+    el.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px">
+        ${items.map(([label, value]) => `
+          <div style="border:1px solid rgba(110,130,165,.18);border-radius:8px;padding:7px 9px;background:var(--card-bg2,#f8f9fa)">
+            <div style="font-size:.72rem;color:var(--text-dim,#888);line-height:1.2">${label}</div>
+            <div style="font-weight:700;color:var(--text-mid,#4f5f78);margin-top:3px">${value}</div>
+          </div>
+        `).join("")}
+      </div>
+      <div style="margin-top:7px;font-size:.76rem;color:var(--text-dim,#888)">
+        圖中長條為全體平均分鐘數；人數統計以 behavior.json 的學生 time_profile 為準，避免未重跑 ETL 時被舊 time_distribution.json 影響。
+      </div>`;
   }
 
   function _regularWeeklyAverage(rows) {
