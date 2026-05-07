@@ -2589,13 +2589,13 @@ function normalizeData() {
 
 async function loadData() {
   try {
-    const res = await fetch('data.json');
+    const res = await fetch('data/data.json');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     DATA = await res.json();
     normalizeData();
     init();
   } catch(e) {
-    document.getElementById('metaInfo').textContent = `⚠ 無法載入 data.json（${e.message}）`;
+    document.getElementById('metaInfo').textContent = `⚠ 無法載入 data/data.json（${e.message}）`;
   }
 }
 
