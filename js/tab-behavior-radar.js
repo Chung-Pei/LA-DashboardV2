@@ -8,6 +8,12 @@ const BehaviorRadarTab = (() => {
 
   // ── 維度中文標籤映射 ──────────────────────────────────────
   const DIM_LABELS = {
+    AUD:                   "AUD 聽覺教材",
+    VID:                   "VID 影音教材",
+    TXT:                   "TXT 文字教材",
+    SUP:                   "SUP 補充筆記",
+    TUT:                   "TUT 輔導資源",
+    QUZ:                   "QUZ 題庫測驗",
     aud_completion_rate:   "聽覺教材",
     vid_completion_rate:   "影音教材",
     txt_completion_rate:   "文字教材",
@@ -30,7 +36,7 @@ const BehaviorRadarTab = (() => {
   };
 
   const CLUSTER_NAMES = {
-    P1: "影音輔導型", P2: "彈性聽覺型", P3: "按部就班型",
+    P1: "影音輔導型", P2: "彈性聽覺型", P3: "平均使用型",
     P4: "題庫刷題型", P5: "被動低參與型",
   };
 
@@ -38,6 +44,7 @@ const BehaviorRadarTab = (() => {
 
   let _radarChart = null;
   let _radarData  = null;
+  let _behaviorMeta = {};
 
   function _dimensions() {
     const explicit = _radarData?.dimensions || _radarData?.meta?.dimensions;
@@ -57,8 +64,76 @@ const BehaviorRadarTab = (() => {
 
   function _values(row, dims) {
     if (!row) return [];
-    if (Array.isArray(row.values)) return row.values;
-    return dims.map(d => row[d] ?? row[String(d).toLowerCase()] ?? 0);
+    const raw = Array.isArray(row.values)
+      ? row.values
+      : dims.map(d => row[d] ?? row[String(d).toLowerCase()] ?? 0);
+    return raw.map(_clampRate);
+  }
+
+  function _clampRate(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(n, 1));
+  }
+
+  function _clusterTotal() {
+    const rows = _clusterRows();
+    const total = Object.values(rows).reduce((sum, row) => sum + (Number(row?.count) || 0), 0);
+    return total || Number(_behaviorMeta?.student_count) || Number(_radarData?.meta?.student_count) || 0;
+  }
+
+  function _formatSemester(sem) {
+    const s = String(sem || "").trim();
+    const m = s.match(/^(\d{3})-?([12])$/);
+    return m ? `${m[1]}(${m[2]})` : s;
+  }
+
+  function _semesterText(meta = {}) {
+    if (meta.semester_range_label) return meta.semester_range_label;
+    if (meta.semester_range) return meta.semester_range;
+    const sems = Array.isArray(meta.semesters) ? meta.semesters.filter(Boolean) : [];
+    if (sems.length) {
+      const labels = sems.map(_formatSemester);
+      return labels[0] === labels[labels.length - 1]
+        ? labels[0]
+        : `${labels[0]}-${labels[labels.length - 1]}`;
+    }
+    return _formatSemester(meta.semester) || "未標示";
+  }
+
+  function _formatDateTime(value) {
+    if (!value) return "未標示";
+    return String(value).replace("T", " ").slice(0, 16);
+  }
+
+  function _renderBehaviorMetaStrip() {
+    const meta = { ...(_radarData?.meta || {}), ...(_behaviorMeta || {}) };
+    const total = _clusterTotal();
+    const semesterText = _semesterText(meta);
+    const el = document.getElementById("behaviorMetaStrip");
+    if (el) {
+      el.style.display = "";
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+          <div style="border:1px solid rgba(46,204,113,.28);background:rgba(46,204,113,.08);border-radius:8px;padding:8px 10px">
+            <div style="font-size:.74rem;color:var(--text-dim,#888)">行為資料年度</div>
+            <div style="font-weight:700;color:#239b56">${semesterText}</div>
+          </div>
+          <div style="border:1px solid rgba(79,142,247,.25);background:rgba(79,142,247,.08);border-radius:8px;padding:8px 10px">
+            <div style="font-size:.74rem;color:var(--text-dim,#888)">總分析人數</div>
+            <div style="font-weight:700;color:var(--accent,#3498db)">${total.toLocaleString()} 位學生</div>
+          </div>
+          <div style="border:1px solid rgba(110,130,165,.22);background:var(--card-bg2,#f8f9fa);border-radius:8px;padding:8px 10px">
+            <div style="font-size:.74rem;color:var(--text-dim,#888)">行為資料更新</div>
+            <div style="font-weight:700;color:var(--text-mid,#566)">${_formatDateTime(meta.generated_at)}</div>
+          </div>
+        </div>`;
+    }
+    const badge = document.getElementById("behaviorRangeBadge");
+    if (badge && total) {
+      badge.style.display = "inline-flex";
+      badge.textContent = `行為 ${semesterText} · ${total.toLocaleString()}人`;
+    }
   }
 
   // ── 初始化 ───────────────────────────────────────────────
@@ -66,7 +141,13 @@ const BehaviorRadarTab = (() => {
   async function init(canvasId = "radarChart", controlsId = "radarControls") {
     BehaviorLoader.setLoading("tab-behavior", true);
     try {
-      _radarData = await BehaviorLoader.load.radar();
+      const [radarData, behaviorData] = await Promise.all([
+        BehaviorLoader.load.radar(),
+        BehaviorLoader.load.behavior().catch(() => null),
+      ]);
+      _radarData = radarData;
+      _behaviorMeta = behaviorData?.meta || {};
+      _renderBehaviorMetaStrip();
       _renderControls(controlsId);
       renderClusterView(canvasId, Object.keys(CLUSTER_NAMES));
     } catch (err) {
@@ -274,21 +355,32 @@ const BehaviorRadarTab = (() => {
     const el = document.getElementById(containerId);
     if (!el) return;
     const rows = _clusterRows();
+    const total = _clusterTotal();
+    const totalCard = `
+      <div class="behavior-cluster-card"
+           style="flex:0 0 150px;min-width:150px;border:1px solid rgba(46,204,113,.28);border-radius:8px;background:rgba(46,204,113,.08);padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)">
+        <div style="font-size:.78rem;color:var(--text-dim,#888)">總分析人數</div>
+        <div style="margin-top:4px;font-weight:800;color:#239b56;font-size:1.45rem;line-height:1">${total.toLocaleString()}</div>
+        <div style="margin-top:6px;font-size:.78rem;line-height:1.25;color:#4f5f78">100.0%</div>
+      </div>`;
     const cards = Object.entries(CLUSTER_NAMES).map(([key, name]) => {
       const n   = rows[key]?.count || 0;
+      const pct = total ? (n / total) * 100 : 0;
       const col = CLUSTER_COLORS[key];
       return `
         <div class="behavior-cluster-card"
-             style="flex:0 0 132px;min-width:132px;border:1px solid rgba(110,130,165,.22);border-radius:8px;background:#fff;padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)">
+             style="flex:0 0 144px;min-width:144px;border:1px solid rgba(110,130,165,.22);border-radius:8px;background:#fff;padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)">
           <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
             <span style="font-weight:700;color:${col.border};font-size:.92rem">${key}</span>
             <span style="font-weight:700;color:${col.border};font-size:1.45rem;line-height:1">${n}</span>
           </div>
           <div title="${name}" style="margin-top:6px;font-size:.82rem;line-height:1.25;color:#4f5f78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+          <div style="margin-top:3px;font-size:.76rem;line-height:1.2;color:var(--text-dim,#888)">佔 ${pct.toFixed(1)}%</div>
         </div>`;
     }).join("");
     el.innerHTML = `
       <div style="display:flex;flex-direction:row;gap:10px;align-items:stretch;overflow-x:auto;padding:4px 2px 8px">
+        ${totalCard}
         ${cards}
       </div>`;
   }
