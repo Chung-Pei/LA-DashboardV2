@@ -71,12 +71,176 @@ const BehaviorCorrelationTab = (() => {
     return raw[`${feat}_vs_${target}`] || [];
   }
 
+  function _toNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function _hasUsableCorrelation(data) {
+    const pearson = data?.pearson || {};
+    const hasR = Object.values(pearson).some(row => {
+      if (row && typeof row === "object") {
+        return Object.values(row).some(v => Number.isFinite(Number(v)));
+      }
+      return Number.isFinite(Number(row));
+    });
+    const scatter = data?.scatter_data || [];
+    const hasScatter = Array.isArray(scatter)
+      ? scatter.length > 0
+      : Object.keys(scatter).length > 0;
+    return hasR && hasScatter;
+  }
+
+  function _featureListFromBehavior(students, sourceData) {
+    if (sourceData?.features?.length) return sourceData.features;
+    const seen = new Set();
+    students.forEach(s => {
+      Object.keys(s.features || {}).forEach(k => seen.add(k));
+    });
+    const preferred = Object.keys(FEAT_LABELS).filter(k => seen.has(k));
+    const remaining = [...seen].filter(k => !preferred.includes(k));
+    return [...preferred, ...remaining];
+  }
+
+  function _targetList(sourceData) {
+    if (sourceData?.targets?.length) return sourceData.targets;
+    if (sourceData?.grades?.length) return sourceData.grades;
+    return ["midterm_score", "final_score"];
+  }
+
+  function _pickGradeRecord(records, targetSemester) {
+    const usable = (records || []).filter(rec => {
+      if (targetSemester && String(rec.semester || "") !== String(targetSemester)) return false;
+      return _toNumber(rec.midterm) !== null ||
+        _toNumber(rec.final) !== null ||
+        _toNumber(rec.semester_score) !== null;
+    });
+    if (!usable.length) return null;
+    usable.sort((a, b) => {
+      const scoreA = (_toNumber(a.midterm) !== null ? 1 : 0) +
+        (_toNumber(a.final) !== null ? 1 : 0) +
+        (_toNumber(a.semester_score) !== null ? 1 : 0);
+      const scoreB = (_toNumber(b.midterm) !== null ? 1 : 0) +
+        (_toNumber(b.final) !== null ? 1 : 0) +
+        (_toNumber(b.semester_score) !== null ? 1 : 0);
+      if (scoreA !== scoreB) return scoreB - scoreA;
+      return String(b.semester || "").localeCompare(String(a.semester || ""));
+    });
+    return usable[0];
+  }
+
+  function _gradeMapFromData(mainData, targetSemester) {
+    const map = new Map();
+    const students = mainData?.students || {};
+    Object.entries(students).forEach(([sourceId, info]) => {
+      const rec = _pickGradeRecord(info?.records, targetSemester);
+      if (!rec) return;
+      const row = {
+        masked_id: info?.name_masked || sourceId,
+        midterm_score: _toNumber(rec.midterm),
+        final_score: _toNumber(rec.final),
+        semester_score: _toNumber(rec.semester_score),
+      };
+      map.set(sourceId, row);
+      map.set(row.masked_id, row);
+    });
+    return map;
+  }
+
+  function _pearsonValue(rows, feat, target) {
+    const pairs = rows
+      .map(row => ({ x: _toNumber(row.features?.[feat]), y: _toNumber(row[target]) }))
+      .filter(p => p.x !== null && p.y !== null);
+    if (pairs.length < 5) return null;
+    const meanX = pairs.reduce((sum, p) => sum + p.x, 0) / pairs.length;
+    const meanY = pairs.reduce((sum, p) => sum + p.y, 0) / pairs.length;
+    let num = 0;
+    let denX = 0;
+    let denY = 0;
+    pairs.forEach(p => {
+      const dx = p.x - meanX;
+      const dy = p.y - meanY;
+      num += dx * dy;
+      denX += dx * dx;
+      denY += dy * dy;
+    });
+    const den = Math.sqrt(denX * denY);
+    if (!den) return null;
+    return Math.round((num / den) * 10000) / 10000;
+  }
+
+  async function _rebuildCorrelationFromMainData(sourceData) {
+    const mainData = typeof DATA !== "undefined" ? DATA : window.DATA;
+    if (!mainData?.students || !BehaviorLoader?.loadBehaviorData) return sourceData;
+
+    const behavior = await BehaviorLoader.loadBehaviorData();
+    const students = behavior.students || [];
+    const targetSemester = sourceData?.meta?.semester || behavior.meta?.semester || mainData?.meta?.semester || "";
+    let gradeMap = _gradeMapFromData(mainData, targetSemester);
+    const targets = _targetList(sourceData);
+    const features = _featureListFromBehavior(students, sourceData);
+
+    let joined = students.map(s => {
+      const grades = gradeMap.get(s.masked_id);
+      if (!grades) return null;
+      return {
+        anon_id: s.anon_id,
+        masked_id: s.masked_id,
+        cluster: s.cluster || "",
+        features: s.features || {},
+        ...grades,
+      };
+    }).filter(Boolean);
+
+    if (!joined.length && targetSemester) {
+      gradeMap = _gradeMapFromData(mainData, "");
+      joined = students.map(s => {
+        const grades = gradeMap.get(s.masked_id);
+        if (!grades) return null;
+        return {
+          anon_id: s.anon_id,
+          masked_id: s.masked_id,
+          cluster: s.cluster || "",
+          features: s.features || {},
+          ...grades,
+        };
+      }).filter(Boolean);
+    }
+
+    if (!joined.length) return sourceData;
+
+    const pearson = {};
+    targets.forEach(target => {
+      pearson[target] = {};
+      features.forEach(feat => {
+        pearson[target][feat] = _pearsonValue(joined, feat, target);
+      });
+    });
+
+    return {
+      ...sourceData,
+      features,
+      targets,
+      pearson,
+      scatter_data: joined,
+      meta: {
+        ...(sourceData?.meta || {}),
+        rebuilt_in_browser: true,
+        joined_students: joined.length,
+      },
+    };
+  }
+
   // ── 初始化 ───────────────────────────────────────────────
 
   async function init(heatmapId = "corrHeatmap", scatterWrapperId = "scatterSection") {
     BehaviorLoader.setLoading("tab-correlation", true);
     try {
       _corrData = await BehaviorLoader.load.correlation();
+      if (!_hasUsableCorrelation(_corrData)) {
+        _corrData = await _rebuildCorrelationFromMainData(_corrData);
+      }
       _renderHeatmap(heatmapId);
       _renderScatterSelector(scatterWrapperId);
     } catch (err) {

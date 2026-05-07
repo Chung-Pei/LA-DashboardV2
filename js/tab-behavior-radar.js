@@ -278,15 +278,19 @@ const BehaviorRadarTab = (() => {
       const n   = rows[key]?.count || 0;
       const col = CLUSTER_COLORS[key];
       return `
-        <div class="col-6 col-md-4 col-lg-2 mb-2">
-          <div class="card h-100 border-0 shadow-sm text-center py-2">
-            <div class="fw-bold" style="color:${col.border};font-size:1.4rem">${n}</div>
-            <div class="small text-muted">${key}</div>
-            <div class="small">${name}</div>
+        <div class="behavior-cluster-card"
+             style="flex:0 0 132px;min-width:132px;border:1px solid rgba(110,130,165,.22);border-radius:8px;background:#fff;padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+            <span style="font-weight:700;color:${col.border};font-size:.92rem">${key}</span>
+            <span style="font-weight:700;color:${col.border};font-size:1.45rem;line-height:1">${n}</span>
           </div>
+          <div title="${name}" style="margin-top:6px;font-size:.82rem;line-height:1.25;color:#4f5f78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
         </div>`;
     }).join("");
-    el.innerHTML = `<div class="row g-2">${cards}</div>`;
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:row;gap:10px;align-items:stretch;overflow-x:auto;padding:4px 2px 8px">
+        ${cards}
+      </div>`;
   }
 
   return { init, switchView, toggleCluster, renderClusterSummary };

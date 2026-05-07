@@ -3,8 +3,8 @@
 // 策略：App Shell (Cache First) + data/*.json (Network First)
 // ══════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'la-dash-v2';
-const DATA_CACHE    = 'la-dash-data-v2';
+const CACHE_VERSION = 'la-dash-v3';
+const DATA_CACHE    = 'la-dash-data-v3';
 
 // App Shell：靜態資源，安裝時全部快取
 // ⚠ CDN 資源釘定版本號，確保快取與 HTML 引用一致
