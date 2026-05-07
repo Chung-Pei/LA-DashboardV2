@@ -880,6 +880,16 @@ body.light .year-range-badge {
   background: rgba(46,110,219,0.10);
   border-color: rgba(46,110,219,0.25);
 }
+.behavior-range-badge {
+  background: rgba(46,204,113,0.12);
+  border-color: rgba(46,204,113,0.28);
+  color: #2ecc71;
+}
+body.light .behavior-range-badge {
+  background: rgba(34,153,84,0.10);
+  border-color: rgba(34,153,84,0.25);
+  color: #1f8f55;
+}
 .subject-field {
   display: inline-flex;
   align-items: center;
@@ -1062,6 +1072,7 @@ body.light .subject-input {
   <div class="header-sep"></div>
   <div class="header-title">學習分析儀表板</div>
   <span class="year-range-badge" id="yearRangeBadge">—</span>
+  <span class="year-range-badge behavior-range-badge" id="behaviorRangeBadge" style="display:none">行為 —</span>
   <div class="subject-field" id="subjectMeta">
     <input class="subject-input" id="subjectInput" type="text" placeholder="科目名" oninput="updateSubjectDisplay()">
   </div>
@@ -1479,6 +1490,7 @@ body.light .subject-input {
       </div>
 
       <h5 style="margin:0 0 12px;font-weight:600">📊 學習行為分析 <span style="font-size:0.8rem;color:var(--text-dim,#888);font-weight:400">Learning Behavior Phase 2</span></h5>
+      <div id="behaviorMetaStrip" style="display:none;margin:0 0 14px"></div>
 
       <!-- 子 Tab -->
       <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap" id="behaviorSubTabs">
@@ -1530,9 +1542,29 @@ body.light .subject-input {
             <tbody>
               <tr><td style="padding:5px 10px">P1</td><td style="padding:5px 10px">影音輔導型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">VID 完成率 ≥ 70% 或 TUT 時間充足</td></tr>
               <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px">P2</td><td style="padding:5px 10px">彈性聽覺型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">AUD 完成率 ≥ 70%，較少使用影片</td></tr>
-              <tr><td style="padding:5px 10px">P3</td><td style="padding:5px 10px">按部就班型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">各類教材均衡使用（預設分群）</td></tr>
+              <tr><td style="padding:5px 10px">P3</td><td style="padding:5px 10px">平均使用型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">各類教材平均使用（預設分群）</td></tr>
               <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px">P4</td><td style="padding:5px 10px">題庫刷題型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">QUZ 作答次數多且佔整體比例高</td></tr>
               <tr><td style="padding:5px 10px">P5</td><td style="padding:5px 10px">被動低參與型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">總學習時間少、教材多樣性低</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <!-- 雷達圖維度說明 -->
+        <div style="margin-top:12px;overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+            <thead>
+              <tr style="background:var(--card-bg2,#f8f9fa)">
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">代碼</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">項目</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">含意</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">AUD</td><td style="padding:5px 10px">聽覺教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">音檔、語音講解等聽覺教材的完成情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">VID</td><td style="padding:5px 10px">影音教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">教學影片、EverCam、動畫解析等影音教材的完成情形。</td></tr>
+              <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">TXT</td><td style="padding:5px 10px">文字教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">講義、參考教材、延伸閱讀等文字資源的完成情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">SUP</td><td style="padding:5px 10px">補充筆記</td><td style="padding:5px 10px;color:var(--text-dim,#888)">補充教材、整理筆記、學習單等支援資源的完成情形。</td></tr>
+              <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">TUT</td><td style="padding:5px 10px">輔導資源</td><td style="padding:5px 10px;color:var(--text-dim,#888)">課輔、解題、重點複習等輔導類資源的使用情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">QUZ</td><td style="padding:5px 10px">題庫測驗</td><td style="padding:5px 10px;color:var(--text-dim,#888)">題庫、測驗、練習題等作答或完成情形。</td></tr>
             </tbody>
           </table>
         </div>
@@ -4809,10 +4841,10 @@ loadData();
 </script>
 
 <!-- ══ Phase 2 學習行為模組 ══ -->
-<script src="js/behavior-loader.js?v=20260507d"></script>
-<script src="js/tab-behavior-radar.js?v=20260507d"></script>
-<script src="js/tab-behavior-correlation.js?v=20260507d"></script>
-<script src="js/tab-behavior-time.js?v=20260507d"></script>
+<script src="js/behavior-loader.js?v=20260507e"></script>
+<script src="js/tab-behavior-radar.js?v=20260507e"></script>
+<script src="js/tab-behavior-correlation.js?v=20260507e"></script>
+<script src="js/tab-behavior-time.js?v=20260507e"></script>
 <script>
 // ── BehaviorTabManager：懶載入協調器 ────────────────────
 const BehaviorTabManager = (() => {
