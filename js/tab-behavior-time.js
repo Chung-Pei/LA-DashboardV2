@@ -34,6 +34,38 @@ const BehaviorTimeTab = (() => {
   let _timeData = null;
   let _charts   = {};
 
+  function _avg(values) {
+    const nums = values.filter(v => v != null && isFinite(v));
+    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+  }
+
+  function _weekAvgAttempts(w) {
+    if (w.avg_attempts != null) return w.avg_attempts;
+    return _avg([w.pass_group_avg_attempts, w.fail_group_avg_attempts]);
+  }
+
+  function _weekPassRate(w) {
+    return w.avg_pass_rate ?? w.overall_pass_rate ?? 0;
+  }
+
+  function _weekActiveStudents(w) {
+    return w.active_students ?? w.total_students ??
+      ((w.pass_group_active_students || 0) + (w.fail_group_active_students || 0));
+  }
+
+  function _studentAvg(field) {
+    return _avg((_timeData?.students || []).map(s => s[field]));
+  }
+
+  function _classAvgTime() {
+    return _timeData?.class_avg_time_distribution || {};
+  }
+
+  function _slotDistribution() {
+    const classAvg = _classAvgTime();
+    return classAvg.avg_time_slot_distribution || classAvg;
+  }
+
   // ── 初始化 ───────────────────────────────────────────────
 
   async function init() {
@@ -61,9 +93,9 @@ const BehaviorTimeTab = (() => {
 
     const weeks          = _quizData.weeks || [];
     const labels         = weeks.map(w => `W${w.week}`);
-    const avgAttempts    = weeks.map(w => w.avg_attempts    || 0);
-    const avgPassRate    = weeks.map(w => (w.avg_pass_rate  || 0) * 100);
-    const activeStudents = weeks.map(w => w.active_students || 0);
+    const avgAttempts    = weeks.map(_weekAvgAttempts);
+    const avgPassRate    = weeks.map(w => _weekPassRate(w) * 100);
+    const activeStudents = weeks.map(_weekActiveStudents);
 
     // 預計算學期均值與最大作答人數（避免每次 hover 重複運算）
     const semAvg      = avgAttempts.reduce((a, b) => a + b, 0) / (avgAttempts.length || 1);
@@ -146,7 +178,7 @@ const BehaviorTimeTab = (() => {
               afterBody: ctx => {
                 if (!ctx.length) return [];
                 const w    = weeks[ctx[0].dataIndex];
-                const diff = (w.avg_attempts || 0) - semAvg;
+                const diff = _weekAvgAttempts(w) - semAvg;
                 return [diff >= 0
                   ? `▲ 高於學期均值 ${diff.toFixed(1)} 次`
                   : `▼ 低於學期均值 ${Math.abs(diff).toFixed(1)} 次`,
@@ -155,7 +187,7 @@ const BehaviorTimeTab = (() => {
               footer: ctx => {
                 if (!ctx.length) return [];
                 const w     = weeks[ctx[0].dataIndex];
-                const total = w.active_students || 0;
+                const total = _weekActiveStudents(w);
                 if (!total) return [];
                 return [`作答人數佔全體 ${Math.round((total / maxStudents) * 100)}%`];
               },
@@ -172,11 +204,20 @@ const BehaviorTimeTab = (() => {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !_timeData) return;
 
-    const classAvg = _timeData.class_avg_time_distribution || {};
+    const classAvg = _classAvgTime();
+    const avgPreMidterm = classAvg.avg_pre_midterm_7d_minutes ?? _studentAvg("pre_midterm_7d_minutes");
+    const avgPreFinal   = classAvg.avg_pre_final_7d_minutes   ?? _studentAvg("pre_final_7d_minutes");
+    const avgWeekly     = classAvg.avg_weekly_minutes ??
+      _avg((_timeData.students || []).map(s => {
+        const activeWeeks = s.active_weeks || 0;
+        return activeWeeks > 0 && s.total_learning_minutes != null
+          ? s.total_learning_minutes / activeWeeks
+          : null;
+      }));
     const preExam  = [
-      { label: "期中考前 7 天",   value: classAvg.avg_pre_midterm_7d_minutes || 0 },
-      { label: "期末考前 7 天",   value: classAvg.avg_pre_final_7d_minutes   || 0 },
-      { label: "其餘週均學習時間", value: classAvg.avg_weekly_minutes          || 0 },
+      { label: "期中考前 7 天",   value: avgPreMidterm || 0 },
+      { label: "期末考前 7 天",   value: avgPreFinal   || 0 },
+      { label: "其餘週均學習時間", value: avgWeekly     || 0 },
     ];
     const regularAvg = preExam[2].value;
 
@@ -241,8 +282,8 @@ const BehaviorTimeTab = (() => {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !_timeData) return;
 
-    const distData   = _timeData.class_avg_time_distribution?.avg_time_slot_distribution || {};
-    const totalDaily = _timeData.class_avg_time_distribution?.avg_daily_minutes;
+    const distData   = _slotDistribution();
+    const totalDaily = _classAvgTime().avg_daily_minutes;
     const slots      = Object.keys(SLOT_LABELS);
     const values     = slots.map(s => (distData[s] || 0) * 100);
 

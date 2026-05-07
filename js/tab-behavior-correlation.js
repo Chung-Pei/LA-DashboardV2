@@ -35,6 +35,29 @@ const BehaviorCorrelationTab = (() => {
   let _scatterChart = null;
   let _currentTarget = null;
 
+  function _targets() {
+    return _corrData?.targets || _corrData?.grades || [];
+  }
+
+  function _pearson(feat, target) {
+    const p = _corrData?.pearson || {};
+    return p[feat]?.[target] ?? p[target]?.[feat] ?? null;
+  }
+
+  function _scatterRows(feat, target) {
+    const raw = _corrData?.scatter_data || [];
+    if (Array.isArray(raw)) {
+      return raw
+        .map(row => ({
+          x: row.features?.[feat],
+          y: row[target],
+          masked_id: row.masked_id,
+        }))
+        .filter(row => row.x != null && row.y != null && isFinite(row.x) && isFinite(row.y));
+    }
+    return raw[`${feat}_vs_${target}`] || [];
+  }
+
   // ── 初始化 ───────────────────────────────────────────────
 
   async function init(heatmapId = "corrHeatmap", scatterWrapperId = "scatterSection") {
@@ -57,7 +80,7 @@ const BehaviorCorrelationTab = (() => {
     if (!el || !_corrData) return;
 
     const features = _corrData.features || [];
-    const grades   = _corrData.grades   || [];
+    const grades   = _targets();
     const pearson  = _corrData.pearson  || {};
 
     const gradeHeaderCells = grades.map(g =>
@@ -68,7 +91,7 @@ const BehaviorCorrelationTab = (() => {
 
     const rows = features.map(feat => {
       const cells = grades.map(g => {
-        const r = pearson[feat]?.[g];
+        const r = _pearson(feat, g);
         if (r == null) return `<td class="text-center text-muted small">—</td>`;
         const bg        = _rToColor(r);
         const textColor = Math.abs(r) > 0.55 ? "#fff" : "#333";
@@ -119,8 +142,11 @@ const BehaviorCorrelationTab = (() => {
     const el = document.getElementById(wrapperId);
     if (!el || !_corrData) return;
 
-    const scatterData = _corrData.scatter_data || {};
-    if (Object.keys(scatterData).length === 0) {
+    const scatterData = _corrData.scatter_data || [];
+    const hasScatterData = Array.isArray(scatterData)
+      ? scatterData.length > 0
+      : Object.keys(scatterData).length > 0;
+    if (!hasScatterData) {
       el.innerHTML = `<p class="text-muted small">（散佈圖資料尚未產出，請執行 ETL）</p>`;
       return;
     }
@@ -131,9 +157,15 @@ const BehaviorCorrelationTab = (() => {
         <canvas id="scatterChart" style="max-height:320px"></canvas>
       </div>`;
 
-    const firstKey               = Object.keys(scatterData)[0];
-    const [featPart, , gradePart] = firstKey.split("_vs_");
-    showScatter(featPart, gradePart || "grade_total");
+    if (Array.isArray(scatterData)) {
+      const firstFeat = (_corrData.features || [])[0];
+      const firstTarget = (_targets())[0];
+      if (firstFeat && firstTarget) showScatter(firstFeat, firstTarget);
+    } else {
+      const firstKey                = Object.keys(scatterData)[0];
+      const [featPart, , gradePart] = firstKey.split("_vs_");
+      showScatter(featPart, gradePart || "grade_total");
+    }
   }
 
   // ── 散佈圖渲染 ───────────────────────────────────────────
@@ -148,12 +180,12 @@ const BehaviorCorrelationTab = (() => {
     if (!_corrData) return;
     _currentTarget = { feat, gradeCol };
 
-    const key    = `${feat}_vs_${gradeCol}`;
-    const raw    = _corrData.scatter_data?.[key] || [];
-    const r      = _corrData.pearson?.[feat]?.[gradeCol];
+    const raw    = _scatterRows(feat, gradeCol);
+    const r      = _pearson(feat, gradeCol);
     const rLabel = r != null ? ` (r = ${r >= 0 ? "+" : ""}${r.toFixed(3)})` : "";
 
     const points  = raw.map(d => ({ x: d.x, y: d.y, masked: d.masked_id }));
+    if (!points.length) return;
 
     // 預計算百分位排序陣列（提升到 render 時，避免每次 hover 重複運算）
     const sortedX = [...points.map(p => p.x)].sort((a, b) => a - b);

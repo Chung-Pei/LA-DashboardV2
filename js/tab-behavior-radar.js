@@ -39,6 +39,24 @@ const BehaviorRadarTab = (() => {
   let _radarChart = null;
   let _radarData  = null;
 
+  function _dimensions() {
+    return _radarData?.dimensions || _radarData?.meta?.dimensions || [];
+  }
+
+  function _clusterRows() {
+    return _radarData?.clusters || _radarData || {};
+  }
+
+  function _passFailRows() {
+    return _radarData?.pass_vs_fail || _radarData || {};
+  }
+
+  function _values(row, dims) {
+    if (!row) return [];
+    if (Array.isArray(row.values)) return row.values;
+    return dims.map(d => row[d] ?? row[String(d).toLowerCase()] ?? 0);
+  }
+
   // ── 初始化 ───────────────────────────────────────────────
 
   async function init(canvasId = "radarChart", controlsId = "radarControls") {
@@ -107,15 +125,16 @@ const BehaviorRadarTab = (() => {
 
   function renderClusterView(canvasId, visibleClusters = Object.keys(CLUSTER_NAMES)) {
     if (!_radarData) return;
-    const dims   = _radarData.dimensions || [];
+    const dims   = _dimensions();
+    const rows   = _clusterRows();
     const labels = dims.map(d => DIM_LABELS[d] || d);
     const datasets = visibleClusters
-      .filter(k => _radarData[k])
+      .filter(k => rows[k])
       .map(k => {
         const col = CLUSTER_COLORS[k];
         return {
-          label: `${k} ${CLUSTER_NAMES[k]}（n=${_radarData[k].count || 0}）`,
-          data:  dims.map(d => _radarData[k][d] ?? 0),
+          label: `${k} ${CLUSTER_NAMES[k]}（n=${rows[k].count || 0}）`,
+          data:  _values(rows[k], dims),
           borderColor:          col.border,
           backgroundColor:      col.bg,
           pointBackgroundColor: col.border,
@@ -130,17 +149,18 @@ const BehaviorRadarTab = (() => {
 
   function renderPassFailView(canvasId) {
     if (!_radarData) return;
-    const dims   = _radarData.dimensions || [];
+    const dims   = _dimensions();
+    const rows   = _passFailRows();
     const labels = dims.map(d => DIM_LABELS[d] || d);
     const datasets = ["pass", "fail"]
-      .filter(k => _radarData[k])
+      .filter(k => rows[k])
       .map(k => {
         const col = CLUSTER_COLORS[k];
         return {
           label: k === "pass"
-            ? `及格（n=${_radarData[k].count || 0}）`
-            : `不及格（n=${_radarData[k].count || 0}）`,
-          data:  dims.map(d => _radarData[k][d] ?? 0),
+            ? `及格（n=${rows[k].count || 0}）`
+            : `不及格（n=${rows[k].count || 0}）`,
+          data:  _values(rows[k], dims),
           borderColor:          col.border,
           backgroundColor:      col.bg,
           pointBackgroundColor: col.border,
@@ -223,8 +243,9 @@ const BehaviorRadarTab = (() => {
     if (!_radarData) return;
     const el = document.getElementById(containerId);
     if (!el) return;
+    const rows = _clusterRows();
     const cards = Object.entries(CLUSTER_NAMES).map(([key, name]) => {
-      const n   = _radarData[key]?.count || 0;
+      const n   = rows[key]?.count || 0;
       const col = CLUSTER_COLORS[key];
       return `
         <div class="col-6 col-md-4 col-lg-2 mb-2">

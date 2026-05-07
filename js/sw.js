@@ -3,8 +3,8 @@
 // 策略：App Shell (Cache First) + data.json (Network First)
 // ══════════════════════════════════════════════════════════
 
-const CACHE_VERSION = 'la-dash-v1';
-const DATA_CACHE    = 'la-dash-data-v1';
+const CACHE_VERSION = 'la-dash-v2';
+const DATA_CACHE    = 'la-dash-data-v2';
 
 // App Shell：靜態資源，安裝時全部快取
 // ⚠ CDN 資源釘定版本號，確保快取與 HTML 引用一致
@@ -54,8 +54,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // data.json → Network First（確保每次取得最新資料）
-  if (url.pathname.endsWith('data.json')) {
+  // data/*.json → Network First（確保每次取得最新資料）
+  if (url.pathname.endsWith('data.json') || /\/data\/.+\.json$/.test(url.pathname)) {
     event.respondWith(networkFirstData(request));
     return;
   }
