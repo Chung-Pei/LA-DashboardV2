@@ -45,6 +45,7 @@ const BehaviorRadarTab = (() => {
   let _radarChart = null;
   let _radarData  = null;
   let _behaviorMeta = {};
+  let _behaviorStudents = [];
 
   function _dimensions() {
     const explicit = _radarData?.dimensions || _radarData?.meta?.dimensions;
@@ -60,6 +61,21 @@ const BehaviorRadarTab = (() => {
 
   function _passFailRows() {
     return _radarData?.pass_vs_fail || _radarData || {};
+  }
+
+  function _nonEmpty(value) {
+    return value !== undefined && value !== null && value !== "" &&
+      !(Array.isArray(value) && value.length === 0);
+  }
+
+  function _mergedMeta() {
+    const meta = {};
+    [_behaviorMeta || {}, _radarData?.meta || {}].forEach(source => {
+      Object.entries(source).forEach(([key, value]) => {
+        if (_nonEmpty(value)) meta[key] = value;
+      });
+    });
+    return meta;
   }
 
   function _values(row, dims) {
@@ -79,7 +95,20 @@ const BehaviorRadarTab = (() => {
   function _clusterTotal() {
     const rows = _clusterRows();
     const total = Object.values(rows).reduce((sum, row) => sum + (Number(row?.count) || 0), 0);
-    return total || Number(_behaviorMeta?.student_count) || Number(_radarData?.meta?.student_count) || 0;
+    const meta = _mergedMeta();
+    return total || Number(meta?.student_count) || 0;
+  }
+
+  function _passFailCount(key, row) {
+    const explicit = Number(row?.count);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    const students = _behaviorStudents || [];
+    if (!students.length) return 0;
+    return students.filter(s => {
+      const score = Number(s.final_score ?? s.features?.final_score);
+      if (!Number.isFinite(score)) return false;
+      return key === "pass" ? score >= 60 : score < 60;
+    }).length;
   }
 
   function _formatSemester(sem) {
@@ -107,7 +136,7 @@ const BehaviorRadarTab = (() => {
   }
 
   function _renderBehaviorMetaStrip() {
-    const meta = { ...(_radarData?.meta || {}), ...(_behaviorMeta || {}) };
+    const meta = _mergedMeta();
     const total = _clusterTotal();
     const semesterText = _semesterText(meta);
     const el = document.getElementById("behaviorMetaStrip");
@@ -147,6 +176,7 @@ const BehaviorRadarTab = (() => {
       ]);
       _radarData = radarData;
       _behaviorMeta = behaviorData?.meta || {};
+      _behaviorStudents = behaviorData?.students || [];
       _renderBehaviorMetaStrip();
       _renderControls(controlsId);
       renderClusterView(canvasId, Object.keys(CLUSTER_NAMES));
@@ -164,24 +194,95 @@ const BehaviorRadarTab = (() => {
     if (!el) return;
 
     const clusterBtns = Object.entries(CLUSTER_NAMES).map(([key, name]) => `
-      <button class="btn btn-sm cluster-toggle active me-1 mb-1"
+      <button class="cluster-toggle active"
               data-cluster="${key}"
-              style="border-color:${CLUSTER_COLORS[key].border};color:${CLUSTER_COLORS[key].border};"
+              style="--cluster-color:${CLUSTER_COLORS[key].border};--cluster-bg:${CLUSTER_COLORS[key].bg};"
               onclick="BehaviorRadarTab.toggleCluster('${key}', this)">
-        ${key} ${name}
+        <span class="cluster-code">${key}</span>
+        <span>${name}</span>
       </button>`).join("");
 
     const viewBtns = `
-      <div class="btn-group btn-group-sm ms-3" role="group">
-        <button class="btn btn-outline-secondary active" id="btnViewCluster"
+      <div class="behavior-view-toggle" role="group" aria-label="雷達圖顯示模式">
+        <button class="behavior-view-btn active" id="btnViewCluster"
                 onclick="BehaviorRadarTab.switchView('cluster')">依分群</button>
-        <button class="btn btn-outline-secondary" id="btnViewPassFail"
+        <button class="behavior-view-btn" id="btnViewPassFail"
                 onclick="BehaviorRadarTab.switchView('passfail')">及格/不及格</button>
       </div>`;
 
     el.innerHTML = `
-      <div class="d-flex flex-wrap align-items-center py-2">
-        <span class="text-muted me-2 small">顯示分群：</span>
+      <style>
+        #${containerId} .behavior-control-panel {
+          display:flex;
+          flex-wrap:wrap;
+          align-items:center;
+          gap:10px;
+          padding:12px;
+          border:1px solid rgba(110,130,165,.22);
+          border-radius:10px;
+          background:var(--card-bg2,#f8f9fa);
+        }
+        #${containerId} .behavior-control-label {
+          color:var(--text-mid,#4f5f78);
+          font-weight:700;
+          font-size:.9rem;
+          margin-right:2px;
+        }
+        #${containerId} .cluster-toggle {
+          display:inline-flex;
+          align-items:center;
+          gap:6px;
+          min-height:36px;
+          padding:7px 12px;
+          border:2px solid var(--cluster-color);
+          border-radius:999px;
+          background:#fff;
+          color:var(--cluster-color);
+          font-size:.9rem;
+          font-weight:700;
+          line-height:1;
+          cursor:pointer;
+          transition:transform .12s ease, box-shadow .12s ease, background .12s ease;
+        }
+        #${containerId} .cluster-toggle:hover {
+          transform:translateY(-1px);
+          box-shadow:0 6px 16px rgba(20,35,60,.12);
+        }
+        #${containerId} .cluster-toggle.active {
+          background:var(--cluster-bg);
+          box-shadow:inset 0 0 0 999px rgba(255,255,255,.18);
+        }
+        #${containerId} .cluster-code {
+          font-family:'JetBrains Mono','Courier New',monospace;
+          font-weight:800;
+        }
+        #${containerId} .behavior-view-toggle {
+          display:inline-flex;
+          align-items:center;
+          gap:4px;
+          padding:3px;
+          border:1px solid rgba(110,130,165,.28);
+          border-radius:999px;
+          background:#fff;
+        }
+        #${containerId} .behavior-view-btn {
+          min-height:32px;
+          padding:6px 12px;
+          border:0;
+          border-radius:999px;
+          background:transparent;
+          color:var(--text-mid,#4f5f78);
+          font-size:.86rem;
+          font-weight:700;
+          cursor:pointer;
+        }
+        #${containerId} .behavior-view-btn.active {
+          background:var(--accent,#3498db);
+          color:#fff;
+        }
+      </style>
+      <div class="behavior-control-panel">
+        <span class="behavior-control-label">顯示分群</span>
         ${clusterBtns}
         ${viewBtns}
       </div>`;
@@ -247,8 +348,8 @@ const BehaviorRadarTab = (() => {
         const col = CLUSTER_COLORS[k];
         return {
           label: k === "pass"
-            ? `及格（n=${rows[k].count || 0}）`
-            : `不及格（n=${rows[k].count || 0}）`,
+            ? `及格（n=${_passFailCount(k, rows[k])}）`
+            : `不及格（n=${_passFailCount(k, rows[k])}）`,
           data:  _values(rows[k], dims),
           borderColor:          col.border,
           backgroundColor:      col.bg,
@@ -296,7 +397,7 @@ const BehaviorRadarTab = (() => {
       data: { labels, datasets },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false,
         scales: {
           r: {
             min: 0,
@@ -312,7 +413,13 @@ const BehaviorRadarTab = (() => {
         plugins: {
           legend: {
             position: "bottom",
-            labels: { font: { size: 12 }, padding: 12 },
+            align: "center",
+            labels: {
+              boxWidth: 34,
+              boxHeight: 12,
+              font: { size: 13, weight: "600" },
+              padding: 16,
+            },
           },
           tooltip: {
             mode: "index",

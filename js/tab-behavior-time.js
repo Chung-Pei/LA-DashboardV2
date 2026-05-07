@@ -302,14 +302,17 @@ const BehaviorTimeTab = (() => {
       },
       options: {
         responsive: true,
-        maintainAspectRatio: true,
+        maintainAspectRatio: false,
         cutout: "62%",
         plugins: {
           legend: {
-            position: "right",
+            position: "bottom",
+            align: "center",
             labels: {
-              font: { size: 11 },
-              padding: 10,
+              boxWidth: 26,
+              boxHeight: 10,
+              font: { size: 12, weight: "600" },
+              padding: 12,
               generateLabels: chart => {
                 const ds = chart.data.datasets[0];
                 return chart.data.labels.map((label, i) => ({

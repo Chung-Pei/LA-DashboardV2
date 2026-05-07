@@ -9,17 +9,24 @@ const BehaviorCorrelationTab = (() => {
   // ── 欄位中文標籤 ─────────────────────────────────────────
   const FEAT_LABELS = {
     aud_completion_rate:      "聽覺教材完成率",
+    aud_total_minutes:        "聽覺教材學習時間",
     vid_completion_rate:      "影音教材完成率",
+    vid_total_minutes:        "影音教材學習時間",
     txt_completion_rate:      "文字教材完成率",
+    txt_total_minutes:        "文字教材學習時間",
     sup_completion_rate:      "補充筆記完成率",
+    sup_total_minutes:        "補充筆記學習時間",
     tut_total_minutes:        "輔導資源時間",
     quz_total_attempts:       "題庫作答次數",
     quz_pass_rate:            "題庫通過率",
+    quz_coverage:             "題庫涵蓋率",
+    quz_late_cram:            "題庫考前集中度",
     total_learning_minutes:   "總學習時間",
     material_diversity_score: "教材多樣性",
     consistency_score:        "學習穩定性",
     early_start_ratio:        "提早學習比例",
     cram_pattern_score:       "臨陣磨槍指數",
+    pre_exam_intensity:       "考前學習強度",
   };
 
   const GRADE_LABELS = {
