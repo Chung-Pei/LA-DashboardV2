@@ -428,6 +428,7 @@ const BehaviorRadarTab = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        events: ["click"],
         scales: {
           r: {
             min: 0,
