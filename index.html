@@ -2655,14 +2655,16 @@ async function loadData() {
 function init() {
   const m = DATA.meta;
   document.getElementById('metaInfo').innerHTML =
-    `${escapeHtml(String(m.total_students))} 位學生 · ${escapeHtml(String(m.semesters.length))} 學期 · 更新 ${escapeHtml(m.generated_at.slice(0,10))}`;
+    `${escapeHtml(String(m.semesters.length))} 學期 · 更新 ${escapeHtml(m.generated_at.slice(0,10))}`;
 
   const sems = m.semesters;
   if (sems.length > 0) {
     const first = sems[0], last = sems[sems.length - 1];
     const fmt = s => `${s.slice(0,3)}(${s.slice(3)})`;
+    const rangeText = first === last ? fmt(first) : `${fmt(first)} - ${fmt(last)}`;
+    const studentText = Number(m.total_students || 0).toLocaleString();
     document.getElementById('yearRangeBadge').textContent =
-      first === last ? fmt(first) : `${fmt(first)} – ${fmt(last)}`;
+      `成績 ${rangeText} · ${studentText}人`;
   }
 
   populateFilters();
