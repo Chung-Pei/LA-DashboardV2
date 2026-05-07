@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════
 // sw.js — 學習數據分析儀表板 Service Worker
-// 策略：App Shell (Cache First) + data.json (Network First)
+// 策略：App Shell (Cache First) + data/*.json (Network First)
 // ══════════════════════════════════════════════════════════
 
 const CACHE_VERSION = 'la-dash-v2';
@@ -102,7 +102,7 @@ async function cacheFirst(request) {
   }
 }
 
-// ── Network First（data.json 專用，帶離線回退）────────────
+// ── Network First（資料 JSON 專用，帶離線回退）────────────
 async function networkFirstData(request) {
   try {
     const response = await fetch(request);
@@ -112,10 +112,10 @@ async function networkFirstData(request) {
     }
     return response;
   } catch {
-    // 離線：嘗試回傳上次快取的 data.json
+    // 離線：嘗試回傳上次快取的資料 JSON
     const cached = await caches.match(request, { cacheName: DATA_CACHE });
     if (cached) {
-      console.log('[SW] Offline: serving cached data.json');
+      console.log('[SW] Offline: serving cached data JSON');
       return cached;
     }
     return new Response(JSON.stringify({
