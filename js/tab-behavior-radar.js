@@ -141,7 +141,10 @@ const BehaviorRadarTab = (() => {
   function _renderBehaviorMetaStrip() {
     const meta = _mergedMeta();
     const total = _clusterTotal();
-    const semesterText = _semesterText(meta);
+    // 若有選擇特定年度，顯示該年度標籤；否則顯示全範圍
+    const semesterText = _selectedSemester && _selectedSemester !== "all"
+      ? _formatSemester(_selectedSemester)
+      : _semesterText(meta);
     const el = document.getElementById("behaviorMetaStrip");
     if (el) {
       el.style.display = "";
@@ -317,16 +320,50 @@ const BehaviorRadarTab = (() => {
 
   function onYearChange(semester) {
     _selectedSemester = semester;
+
     if (semester === "all") {
+      // 全部年度：使用頂層 clusters / pass_vs_fail（跨年彙總）
       _behaviorStudents = _allStudents;
+      // 還原 _radarData 至全量
+      if (_radarData?._base) {
+        _radarData = _radarData._base;
+      }
     } else {
-      // 從 behavior.json 中找有 semester 欄位的學生；若無則用全量（radar_chart_data 是跨年彙總）
+      // 特定年度：切換到 by_semester[semester]
+      const base = _radarData?._base || _radarData;
+      const semData = base?.by_semester?.[semester];
+      if (semData) {
+        // 建立一個暫時的 radarData 結構，覆蓋 clusters / pass_vs_fail
+        _radarData = {
+          ...base,
+          _base: base,               // 保留原始資料供切回「全部」使用
+          clusters:    semData.clusters,
+          pass_vs_fail: semData.pass_vs_fail,
+          meta: {
+            ...(base.meta || {}),
+            student_count: semData.student_count,
+          },
+        };
+      } else {
+        // 無對應年度資料（舊版 ETL 產出），保留全量並提示
+        console.warn(`[BehaviorRadarTab] by_semester["${semester}"] 不存在，請重新執行 ETL`);
+        const base2 = _radarData?._base || _radarData;
+        _radarData = { ...base2, _base: base2 };
+      }
+      // 篩選 behaviorStudents（用於 pass/fail 人數統計）
       _behaviorStudents = _allStudents.filter(s =>
-        String(s.semester || s.features?.semester || "").replace(/-/g,"") === String(semester).replace(/-/g,"")
+        String(s.semester || "").replace(/-/g, "") === String(semester).replace(/-/g, "")
       );
     }
-    // 用篩選後的學生重新計算 pass/fail count，然後重繪
-    const activeMode = document.getElementById("btnViewPassFail")?.classList.contains("active") ? "passfail" : "cluster";
+
+    // 更新 meta strip 顯示
+    _renderBehaviorMetaStrip();
+
+    // 重繪
+    const activeMode = document.getElementById("btnViewPassFail")?.classList.contains("active")
+      ? "passfail" : "cluster";
+    // 重置分群按鈕為全選狀態
+    document.querySelectorAll(".cluster-toggle").forEach(b => b.classList.add("active"));
     switchView(activeMode);
   }
 
@@ -428,7 +465,6 @@ const BehaviorRadarTab = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        events: ["click"],
         scales: {
           r: {
             min: 0,

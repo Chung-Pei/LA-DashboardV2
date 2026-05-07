@@ -150,7 +150,6 @@ const BehaviorTimeTab = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        events: ["click"],
         interaction: { mode: "nearest", intersect: true },
         scales: {
           yAttempts: {
@@ -259,7 +258,6 @@ const BehaviorTimeTab = (() => {
         indexAxis: "y",
         responsive: true,
         maintainAspectRatio: false,
-        events: ["click"],
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -392,7 +390,6 @@ const BehaviorTimeTab = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        events: ["click"],
         cutout: "62%",
         plugins: {
           legend: {

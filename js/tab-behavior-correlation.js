@@ -555,7 +555,6 @@ const BehaviorCorrelationTab = (() => {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        events: ["click"],
         scales: {
           x: {
             title: { display: true, text: FEAT_LABELS[feat] || feat, font: { size: 11 } },
