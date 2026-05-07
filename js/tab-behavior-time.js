@@ -32,11 +32,17 @@ const BehaviorTimeTab = (() => {
 
   let _quizData = null;
   let _timeData = null;
+  let _behaviorData = null;
   let _charts   = {};
 
   function _avg(values) {
     const nums = values.filter(v => v != null && isFinite(v));
     return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+  }
+
+  function _num(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
   }
 
   function _weekAvgAttempts(w) {
@@ -71,9 +77,10 @@ const BehaviorTimeTab = (() => {
   async function init() {
     BehaviorLoader.setLoading("tab-time", true);
     try {
-      [_quizData, _timeData] = await Promise.all([
+      [_quizData, _timeData, _behaviorData] = await Promise.all([
         BehaviorLoader.load.quiz(),
         BehaviorLoader.load.time(),
+        BehaviorLoader.load.behavior().catch(() => null),
       ]);
       renderWeeklyQuiz("weeklyQuizChart");
       renderPreExamIntensity("preExamChart");
@@ -205,19 +212,23 @@ const BehaviorTimeTab = (() => {
     if (!canvas || !_timeData) return;
 
     const classAvg = _classAvgTime();
-    const avgPreMidterm = classAvg.avg_pre_midterm_7d_minutes ?? _studentAvg("pre_midterm_7d_minutes");
-    const avgPreFinal   = classAvg.avg_pre_final_7d_minutes   ?? _studentAvg("pre_final_7d_minutes");
-    const avgWeekly     = classAvg.avg_weekly_minutes ??
-      _avg((_timeData.students || []).map(s => {
-        const activeWeeks = s.active_weeks || 0;
-        return activeWeeks > 0 && s.total_learning_minutes != null
-          ? s.total_learning_minutes / activeWeeks
-          : null;
-      }));
+    const rows = _preExamRows();
+    const totalStudents = rows.length || ((_timeData.students || []).length);
+    const avgPreMidterm = classAvg.avg_pre_midterm_7d_minutes ?? _avg(rows.map(s => s.preMidterm));
+    const avgPreFinal   = classAvg.avg_pre_final_7d_minutes   ?? _avg(rows.map(s => s.preFinal));
+    const avgWeekly     = classAvg.avg_weekly_minutes ?? _regularWeeklyAverage(rows);
+    const midCount = rows.filter(s => s.preMidterm > 0).length;
+    const finCount = rows.filter(s => s.preFinal > 0).length;
+    const anyCount = rows.filter(s => s.preMidterm > 0 || s.preFinal > 0).length;
+    const onlyAnyCount = rows.filter(s =>
+      (s.preMidterm > 0 || s.preFinal > 0) &&
+      Math.max(s.totalMinutes - s.preMidterm - s.preFinal, 0) <= 1e-9
+    ).length;
+    const pct = count => totalStudents ? (count / totalStudents) * 100 : 0;
     const preExam  = [
-      { label: "期中考前 7 天",   value: avgPreMidterm || 0 },
-      { label: "期末考前 7 天",   value: avgPreFinal   || 0 },
-      { label: "其餘週均學習時間", value: avgWeekly     || 0 },
+      { label: `期中考前 7 天（${midCount}人，${pct(midCount).toFixed(1)}%）`, value: avgPreMidterm || 0, count: midCount, pct: pct(midCount) },
+      { label: `期末考前 7 天（${finCount}人，${pct(finCount).toFixed(1)}%）`, value: avgPreFinal   || 0, count: finCount, pct: pct(finCount) },
+      { label: "其餘週均學習時間", value: avgWeekly || 0, count: totalStudents, pct: totalStudents ? 100 : 0 },
     ];
     const regularAvg = preExam[2].value;
 
@@ -254,6 +265,21 @@ const BehaviorTimeTab = (() => {
               footer: ctx => {
                 if (!ctx.length) return [];
                 const idx = ctx[0].dataIndex;
+                if (idx < 2) {
+                  const row = preExam[idx];
+                  const lines = [
+                    `有時數人數：${row.count} / ${totalStudents} 人（${row.pct.toFixed(1)}%）`,
+                    `任一考前 7 天有時數：${anyCount} 人（${pct(anyCount).toFixed(1)}%）`,
+                    `只在考前 7 天有時數：${onlyAnyCount} 人（${pct(onlyAnyCount).toFixed(1)}%）`,
+                  ];
+                  if (regularAvg > 0) {
+                    const ratio = (ctx[0].raw / regularAvg).toFixed(1);
+                    lines.push(ctx[0].raw > regularAvg
+                      ? `📈 為其餘週均的 ${ratio} 倍`
+                      : `📉 低於其餘週均（${ratio} 倍）`);
+                  }
+                  return lines;
+                }
                 if (idx < 2 && regularAvg > 0) {
                   const ratio = (ctx[0].raw / regularAvg).toFixed(1);
                   return [ctx[0].raw > regularAvg
@@ -274,6 +300,31 @@ const BehaviorTimeTab = (() => {
         },
       },
     });
+  }
+
+  function _preExamRows() {
+    const byMasked = new Map((_timeData.students || []).map(s => [s.masked_id, s]));
+    const source = (_behaviorData?.students?.length ? _behaviorData.students : _timeData.students) || [];
+    return source.map(s => {
+      const timeRow = byMasked.get(s.masked_id) || {};
+      const features = s.features || {};
+      const profile = s.time_profile || {};
+      return {
+        preMidterm: _num(timeRow.pre_midterm_7d_minutes ?? profile.pre_midterm_7d_minutes),
+        preFinal: _num(timeRow.pre_final_7d_minutes ?? profile.pre_final_7d_minutes),
+        totalMinutes: _num(timeRow.total_learning_minutes ?? features.total_learning_minutes),
+        activeWeeks: _num(timeRow.active_weeks ?? profile.active_weeks),
+      };
+    });
+  }
+
+  function _regularWeeklyAverage(rows) {
+    if (!rows.length) return 0;
+    const meta = _behaviorData?.meta || _timeData?.meta || {};
+    const semesterCount = Array.isArray(meta.semesters) && meta.semesters.length ? meta.semesters.length : 1;
+    const totalWeeks = Math.max(semesterCount * 18, 3);
+    const regularWeeks = Math.max(totalWeeks - 2, 1);
+    return _avg(rows.map(s => Math.max(s.totalMinutes - s.preMidterm - s.preFinal, 0) / regularWeeks));
   }
 
   // ── 3. 學習時段圓環圖 ────────────────────────────────────
