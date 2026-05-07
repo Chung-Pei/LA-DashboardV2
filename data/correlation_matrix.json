@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "schema_version": "2.0",
+    "semester": "1141",
+    "generated_at": "2026-05-07T11:40:51",
+    "student_count": 0
+  },
+  "features": [
+    "aud_total_minutes",
+    "vid_total_minutes",
+    "txt_completion_rate",
+    "sup_completion_rate",
+    "tut_total_minutes",
+    "quz_total_attempts",
+    "total_learning_minutes",
+    "consistency_score",
+    "pre_exam_intensity"
+  ],
+  "targets": [
+    "midterm_score",
+    "final_score"
+  ],
+  "pearson": {
+    "midterm_score": {
+      "aud_total_minutes": null,
+      "vid_total_minutes": null,
+      "txt_completion_rate": null,
+      "sup_completion_rate": null,
+      "tut_total_minutes": null,
+      "quz_total_attempts": null,
+      "total_learning_minutes": null,
+      "consistency_score": null,
+      "pre_exam_intensity": null
+    },
+    "final_score": {
+      "aud_total_minutes": null,
+      "vid_total_minutes": null,
+      "txt_completion_rate": null,
+      "sup_completion_rate": null,
+      "tut_total_minutes": null,
+      "quz_total_attempts": null,
+      "total_learning_minutes": null,
+      "consistency_score": null,
+      "pre_exam_intensity": null
+    }
+  },
+  "scatter_data": []
+}
