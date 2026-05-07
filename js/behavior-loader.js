@@ -7,6 +7,12 @@
 const BehaviorLoader = (() => {
   // ── 快取 ──────────────────────────────────────────────────
   const _cache = {};
+  const DATA_VERSION = "20260507f";
+
+  function _withCacheBust(url) {
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}v=${DATA_VERSION}`;
+  }
 
   /**
    * 載入單一 JSON 檔案，結果快取於 _cache[key]
@@ -16,7 +22,8 @@ const BehaviorLoader = (() => {
    */
   async function fetchJSON(key, url) {
     if (_cache[key]) return _cache[key];
-    const res = await fetch(url);
+    const fetchUrl = _withCacheBust(url);
+    const res = await fetch(fetchUrl, { cache: "no-store" });
     if (!res.ok) throw new Error(`載入失敗：${url}（${res.status}）`);
     const text = await res.text();
     try {
