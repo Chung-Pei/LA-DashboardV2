@@ -54,6 +54,12 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
+  // HTML 導覽頁優先取新版，避免舊 App Shell 卡住
+  if (request.mode === 'navigate' || url.pathname.endsWith('.html')) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
   // data/*.json → Network First（確保每次取得最新資料）
   if (url.pathname.endsWith('data.json') || /\/data\/.+\.json$/.test(url.pathname)) {
     event.respondWith(networkFirstData(request));
@@ -72,8 +78,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App Shell 靜態資源 → Cache First
-  if (url.pathname.match(/\.(html|js|css|png|svg|ico|webmanifest|json)$/)) {
+  // JS 優先取新版，避免分頁模組更新後仍被舊快取卡住
+  if (url.pathname.endsWith('.js')) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  // 其他 App Shell 靜態資源 → Cache First
+  if (url.pathname.match(/\.(css|png|svg|ico|webmanifest|json)$/)) {
     event.respondWith(cacheFirst(request));
     return;
   }

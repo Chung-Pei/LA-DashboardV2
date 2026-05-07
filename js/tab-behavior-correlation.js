@@ -36,7 +36,20 @@ const BehaviorCorrelationTab = (() => {
   let _currentTarget = null;
 
   function _targets() {
-    return _corrData?.targets || _corrData?.grades || [];
+    const explicit = _corrData?.targets || _corrData?.grades;
+    if (explicit?.length) return explicit;
+    const p = _corrData?.pearson || {};
+    const targetLike = Object.keys(p).filter(k => /score|grade|midterm|final/i.test(k));
+    return targetLike.length ? targetLike : Object.keys(p);
+  }
+
+  function _features() {
+    if (_corrData?.features?.length) return _corrData.features;
+    const p = _corrData?.pearson || {};
+    const targets = _targets();
+    const fromTargetRows = targets.flatMap(target => Object.keys(p[target] || {}));
+    if (fromTargetRows.length) return [...new Set(fromTargetRows)];
+    return Object.keys(p);
   }
 
   function _pearson(feat, target) {
@@ -79,9 +92,14 @@ const BehaviorCorrelationTab = (() => {
     const el = document.getElementById(containerId);
     if (!el || !_corrData) return;
 
-    const features = _corrData.features || [];
+    const features = _features();
     const grades   = _targets();
     const pearson  = _corrData.pearson  || {};
+
+    if (!features.length || !grades.length) {
+      el.innerHTML = `<p class="text-muted small">相關性資料格式缺少 features / targets。</p>`;
+      return;
+    }
 
     const gradeHeaderCells = grades.map(g =>
       `<th class="text-center small fw-normal" style="min-width:90px">
@@ -158,7 +176,7 @@ const BehaviorCorrelationTab = (() => {
       </div>`;
 
     if (Array.isArray(scatterData)) {
-      const firstFeat = (_corrData.features || [])[0];
+      const firstFeat = (_features())[0];
       const firstTarget = (_targets())[0];
       if (firstFeat && firstTarget) showScatter(firstFeat, firstTarget);
     } else {

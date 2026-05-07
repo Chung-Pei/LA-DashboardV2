@@ -40,7 +40,11 @@ const BehaviorRadarTab = (() => {
   let _radarData  = null;
 
   function _dimensions() {
-    return _radarData?.dimensions || _radarData?.meta?.dimensions || [];
+    const explicit = _radarData?.dimensions || _radarData?.meta?.dimensions;
+    if (explicit?.length) return explicit;
+    const firstCluster = Object.values(_clusterRows()).find(row => Array.isArray(row?.values));
+    if (firstCluster?.values?.length === 6) return ["AUD", "VID", "TXT", "SUP", "TUT", "QUZ"];
+    return firstCluster?.values?.map((_, i) => `D${i + 1}`) || [];
   }
 
   function _clusterRows() {
@@ -142,6 +146,10 @@ const BehaviorRadarTab = (() => {
           pointRadius: 3,
         };
       });
+    if (!labels.length || !datasets.length) {
+      _renderEmpty(canvasId, "雷達圖資料格式缺少 dimensions 或 clusters。");
+      return;
+    }
     _renderChart(canvasId, labels, datasets);
   }
 
@@ -168,7 +176,27 @@ const BehaviorRadarTab = (() => {
           pointRadius: 4,
         };
       });
+    if (!labels.length || !datasets.length) {
+      _renderEmpty(canvasId, "及格/不及格雷達圖資料格式缺少 pass_vs_fail。");
+      return;
+    }
     _renderChart(canvasId, labels, datasets);
+  }
+
+  function _renderEmpty(canvasId, message) {
+    const canvas = document.getElementById(canvasId);
+    const wrap = canvas?.parentElement;
+    if (wrap) {
+      canvas.style.display = "none";
+      let msg = wrap.querySelector(".behavior-empty-message");
+      if (!msg) {
+        msg = document.createElement("div");
+        msg.className = "behavior-empty-message text-muted small";
+        msg.style.cssText = "padding:24px;text-align:center";
+        wrap.appendChild(msg);
+      }
+      msg.textContent = message;
+    }
   }
 
   // ── Chart.js 實例管理 ─────────────────────────────────────
@@ -176,6 +204,8 @@ const BehaviorRadarTab = (() => {
   function _renderChart(canvasId, labels, datasets) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
+    canvas.style.display = "";
+    canvas.parentElement?.querySelector(".behavior-empty-message")?.remove();
     if (_radarChart) {
       _radarChart.destroy();
       _radarChart = null;
