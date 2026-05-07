@@ -365,6 +365,27 @@ body.chart-expanded-open { overflow: hidden; }
   overflow: auto;
 }
 
+.behavior-radar-wrap {
+  height: 500px;
+  max-width: 900px;
+  margin: 0 auto;
+  overflow: visible;
+}
+.behavior-time-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 1fr);
+  gap: 16px;
+}
+.behavior-time-slot-wrap {
+  height: 280px;
+  position: relative;
+  overflow: visible;
+}
+@media (max-width: 900px) {
+  .behavior-time-grid { grid-template-columns: 1fr; }
+  .behavior-radar-wrap { height: 460px; }
+}
+
 /* ── SLOPE CHART ── */
 .slope-wrap { overflow-x: auto; }
 .slope-svg { display: block; min-width: 300px; }
@@ -1525,8 +1546,8 @@ body.light .subject-input {
           <div class="chart-title" style="--accent-color:var(--accent)">
             <span class="dot"></span>學習行為分群雷達圖
           </div>
-          <div class="chart-wrap" style="max-width:520px;margin:0 auto">
-            <canvas id="radarChart" style="max-height:400px"></canvas>
+          <div class="chart-wrap behavior-radar-wrap">
+            <canvas id="radarChart"></canvas>
           </div>
         </div>
         <!-- 分群說明 -->
@@ -1600,7 +1621,7 @@ body.light .subject-input {
             <canvas id="weeklyQuizChart"></canvas>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="behavior-time-grid">
           <div class="chart-card">
             <div class="chart-title" style="--accent-color:var(--accent3)">
               <span class="dot"></span>考前學習強度
@@ -1613,8 +1634,8 @@ body.light .subject-input {
             <div class="chart-title" style="--accent-color:var(--accent4)">
               <span class="dot"></span>學習時段分布
             </div>
-            <div class="chart-wrap">
-              <canvas id="timeSlotChart" style="max-height:200px"></canvas>
+            <div class="chart-wrap behavior-time-slot-wrap">
+              <canvas id="timeSlotChart"></canvas>
             </div>
           </div>
         </div>
@@ -4841,10 +4862,10 @@ loadData();
 </script>
 
 <!-- ══ Phase 2 學習行為模組 ══ -->
-<script src="js/behavior-loader.js?v=20260507f"></script>
-<script src="js/tab-behavior-radar.js?v=20260507f"></script>
-<script src="js/tab-behavior-correlation.js?v=20260507f"></script>
-<script src="js/tab-behavior-time.js?v=20260507f"></script>
+<script src="js/behavior-loader.js?v=20260507g"></script>
+<script src="js/tab-behavior-radar.js?v=20260507g"></script>
+<script src="js/tab-behavior-correlation.js?v=20260507g"></script>
+<script src="js/tab-behavior-time.js?v=20260507g"></script>
 <script>
 // ── BehaviorTabManager：懶載入協調器 ────────────────────
 const BehaviorTabManager = (() => {
