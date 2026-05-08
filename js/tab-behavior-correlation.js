@@ -48,6 +48,7 @@ const BehaviorCorrelationTab = (() => {
   let _allSemesters     = [];     // 可用學期列表
   let _filterSemester   = "all";  // 目前學期篩選
   let _filterCluster    = "all";  // 目前分群篩選
+  let _corrType         = "pearson"; // "pearson" | "spearman"
 
   function _targets() {
     const explicit = _corrData?.targets || _corrData?.grades;
@@ -67,8 +68,11 @@ const BehaviorCorrelationTab = (() => {
   }
 
   function _pearson(feat, target) {
-    const p = _corrData?.pearson || {};
-    return p[feat]?.[target] ?? p[target]?.[feat] ?? null;
+    // Reads active matrix: spearman when _corrType==="spearman", else pearson
+    const m = (_corrType === "spearman")
+      ? (_corrData?.spearman || _corrData?.pearson || {})
+      : (_corrData?.pearson || {});
+    return m[feat]?.[target] ?? m[target]?.[feat] ?? null;
   }
 
   function _scatterRows(feat, target) {
@@ -182,6 +186,42 @@ const BehaviorCorrelationTab = (() => {
     const den = Math.sqrt(denX * denY);
     if (!den) return null;
     return Math.round((num / den) * 10000) / 10000;
+  }
+
+  // ── Spearman 等級相關係數 ─────────────────────────────────
+  function _rankArray(arr) {
+    const n = arr.length;
+    const indexed = arr.map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+    const ranks = new Array(n);
+    let i = 0;
+    while (i < n) {
+      let j = i;
+      while (j < n && indexed[j].v === indexed[i].v) j++;
+      const avg = (i + j + 1) / 2;
+      for (let k = i; k < j; k++) ranks[indexed[k].i] = avg;
+      i = j;
+    }
+    return ranks;
+  }
+
+  function _spearmanValue(rows, feat, target) {
+    const pairs = rows
+      .map(row => ({ x: _toNumber(row.features?.[feat]), y: _toNumber(row[target]) }))
+      .filter(p => p.x !== null && p.y !== null);
+    if (pairs.length < 5) return null;
+    const xs = pairs.map(p => p.x);
+    const ys = pairs.map(p => p.y);
+    const rx = _rankArray(xs), ry = _rankArray(ys);
+    const n = rx.length;
+    const mX = rx.reduce((s, v) => s + v, 0) / n;
+    const mY = ry.reduce((s, v) => s + v, 0) / n;
+    let num = 0, dX = 0, dY = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = rx[i] - mX, dy = ry[i] - mY;
+      num += dx * dy; dX += dx * dx; dY += dy * dy;
+    }
+    const den = Math.sqrt(dX * dY);
+    return den ? Math.round(num / den * 10000) / 10000 : null;
   }
 
   async function _rebuildCorrelationFromMainData(sourceData) {
@@ -319,11 +359,17 @@ const BehaviorCorrelationTab = (() => {
       ..._allSemesters.map(s => `<option value="${s}">${_formatSemLabel(s)}</option>`),
     ].join("");
 
+    const _clCounts = {};
+    if (Array.isArray(_allScatterData)) {
+      _allScatterData.forEach(r => { const c = r.cluster || ""; if (c) _clCounts[c] = (_clCounts[c] || 0) + 1; });
+    }
     const clusterOptions = [
-      `<option value="all">全部分群</option>`,
-      ...Object.entries(CLUSTER_NAMES_CORR).map(([k, n]) =>
-        `<option value="${k}">${k} ${n}</option>`
-      ),
+      `<option value="all">全部分群（${Array.isArray(_allScatterData) ? _allScatterData.length : "—"}）</option>`,
+      ...Object.entries(CLUSTER_NAMES_CORR).map(([k, n]) => {
+        const cnt = _clCounts[k] || 0;
+        const dis = cnt === 0 ? " disabled" : "";
+        return `<option value="${k}"${dis}>${k} ${n}${cnt > 0 ? "（" + cnt + "）" : "（無資料）"}</option>`;
+      }),
     ].join("");
 
     const bar = document.createElement("div");
@@ -347,9 +393,30 @@ const BehaviorCorrelationTab = (() => {
           ${clusterOptions}
         </select>
       </div>
-      <span id="corrFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>`;
+      <span id="corrFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>
+      <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px">
+        <span style="font-size:.76rem;color:var(--text-dim,#888)">方法</span>
+        <button id="btnCorrPearson" onclick="BehaviorCorrelationTab.setCorrType('pearson')">Pearson <i>r</i></button><button id="btnCorrSpearman" onclick="BehaviorCorrelationTab.setCorrType('spearman')">Spearman <i>ρ</i></button>
+      </span>`;
 
     anchor.parentNode.insertBefore(bar, anchor);
+    _updateCorrTypeButtons();
+  }
+
+  function _updateCorrTypeButtons() {
+    const btnP = document.getElementById("btnCorrPearson");
+    const btnS = document.getElementById("btnCorrSpearman");
+    if (!btnP || !btnS) return;
+    const ip = _corrType === "pearson";
+    const ac = "var(--accent,#3498db)";
+    btnP.style.cssText = `font-size:.76rem;padding:3px 9px;border-radius:6px 0 0 6px;border:1px solid ${ac};background:${ip ? ac : "transparent"};color:${ip ? "#fff" : ac};cursor:pointer;font-family:inherit;font-weight:${ip ? "700" : "400"}`;
+    btnS.style.cssText = `font-size:.76rem;padding:3px 9px;border-radius:0 6px 6px 0;border:1px solid ${ac};background:${ip ? "transparent" : ac};color:${ip ? ac : "#fff"};cursor:pointer;font-family:inherit;font-weight:${ip ? "400" : "700"}`;
+  }
+
+  function setCorrType(type) {
+    _corrType = type;
+    _updateCorrTypeButtons();
+    _renderHeatmap("corrHeatmap");
   }
 
   function onFilterChange() {
@@ -394,16 +461,17 @@ const BehaviorCorrelationTab = (() => {
     const features = _features();
     const targets  = _targets();
     if (Array.isArray(filtered) && filtered.length >= 5) {
-      const pearson = {};
+      const pearson = {}, spearman = {};
       targets.forEach(target => {
-        pearson[target] = {};
+        pearson[target] = {}; spearman[target] = {};
         features.forEach(feat => {
-          pearson[target][feat] = _pearsonValue(filtered, feat, target);
+          pearson[target][feat]  = _pearsonValue(filtered, feat, target);
+          spearman[target][feat] = _spearmanValue(filtered, feat, target);
         });
       });
-      _corrData = { ..._corrData, pearson, scatter_data: filtered };
+      _corrData = { ..._corrData, pearson, spearman, scatter_data: filtered };
     } else {
-      // 人數不足時，仍用原始 pearson 但更新 scatter_data
+      // 人數不足：保留既有矩陣（不重算），只更新 scatter_data
       _corrData = { ..._corrData, scatter_data: filtered };
     }
 
@@ -419,7 +487,12 @@ const BehaviorCorrelationTab = (() => {
 
     const features = _features();
     const grades   = _targets();
-    const pearson  = _corrData.pearson  || {};
+    const isSpearman = _corrType === "spearman";
+    const matrix = isSpearman
+      ? (_corrData.spearman || _corrData.pearson || {})
+      : (_corrData.pearson || {});
+    const pearson = matrix; // alias for _pearson() helper
+    const corrSym = isSpearman ? "ρ" : "r";
 
     if (!features.length || !grades.length) {
       el.innerHTML = `<p class="text-muted small">相關性資料格式缺少 features / targets。</p>`;
@@ -440,8 +513,8 @@ const BehaviorCorrelationTab = (() => {
         const textColor = Math.abs(r) > 0.55 ? "#fff" : "#333";
         return `<td class="text-center small" style="background:${bg};color:${textColor};cursor:pointer"
                     onclick="BehaviorCorrelationTab.showScatter('${feat}','${g}')"
-                    title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: r=${r}">
-                  ${r >= 0 ? "+" : ""}${r.toFixed(2)}
+                    title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: ${corrSym}=${r}">
+                  ${corrSym}${r >= 0 ? "+" : ""}${r.toFixed(2)}
                 </td>`;
       }).join("");
       return `<tr>
@@ -463,7 +536,7 @@ const BehaviorCorrelationTab = (() => {
         </table>
       </div>
       <p class="text-muted small mb-0">
-        點擊儲存格可查看散佈圖（${isSpearman?"Spearman ρ":"Pearson r"}）。色彩：
+        點擊儲存格可查看散佈圖（${isSpearman ? "Spearman ρ" : "Pearson r"}）。色彩：
         <span style="background:${_rToColor(0.6)};color:#fff;padding:1px 6px;border-radius:3px">強正相關</span>
         <span style="background:${_rToColor(-0.6)};color:#fff;padding:1px 6px;border-radius:3px;margin-left:4px">強負相關</span>
         <span style="background:${_rToColor(0)};color:#333;padding:1px 6px;border-radius:3px;margin-left:4px">無相關</span>
@@ -490,14 +563,19 @@ const BehaviorCorrelationTab = (() => {
       ? scatterData.length > 0
       : Object.keys(scatterData).length > 0;
     if (!hasScatterData) {
-      el.innerHTML = `<p class="text-muted small">（散佈圖資料尚未產出，請執行 ETL）</p>`;
+      const noDataReason = (_filterCluster !== "all")
+        ? `分群 ${_filterCluster} 在本相關性資料集中無對應學生（兩資料集學生母體不同）`
+        : (_filterSemester !== "all")
+          ? `年度 ${_filterSemester} 尚無獨立散佈圖資料（ETL 尚未產出 by_semester）`
+          : "散佈圖資料尚未產出，請執行 ETL";
+      el.innerHTML = `<div style="padding:14px;background:rgba(230,126,34,.08);border:1px solid rgba(230,126,34,.3);border-radius:8px;font-size:.82rem;color:#a04000">⚠️ ${noDataReason}</div>`;
       return;
     }
 
     el.innerHTML = `
       <h6 class="mt-4 mb-2 fw-semibold">散佈圖</h6>
-      <div id="scatterChartWrap">
-        <canvas id="scatterChart" style="max-height:320px"></canvas>
+      <div id="scatterChartWrap" style="position:relative;height:320px;width:100%">
+        <canvas id="scatterChart"></canvas>
       </div>`;
 
     if (Array.isArray(scatterData)) {
@@ -593,20 +671,16 @@ const BehaviorCorrelationTab = (() => {
                 if (!ctx.length) return [];
                 const lines = [];
                 if (r != null) {
-                  const strength = Math.abs(r) >= 0.5 ? "強" : Math.abs(r) >= 0.3 ? "中等" : "弱";
-                  const dir      = r >= 0 ? "正" : "負";
-                  lines.push(`📈 Pearson r = ${r >= 0 ? "+" : ""}${r.toFixed(3)}`);
-                  lines.push(`   → ${strength}${dir}相關`);
+                  const st = Math.abs(r) >= 0.5 ? "強" : Math.abs(r) >= 0.3 ? "中等" : "弱";
+                  lines.push(`📈 Pearson r = ${r >= 0 ? "+" : ""}${r.toFixed(3)}  → ${st}${r >= 0 ? "正" : "負"}相關`);
                 }
                 const rho = _spearmanValue(
                   _scatterRows(feat, gradeCol).map(d => ({ features: { [feat]: d.x }, [gradeCol]: d.y })),
                   feat, gradeCol
                 );
                 if (rho != null) {
-                  const sStr = Math.abs(rho) >= 0.5 ? "強" : Math.abs(rho) >= 0.3 ? "中等" : "弱";
-                  const dStr = rho >= 0 ? "正" : "負";
-                  lines.push(`📊 Spearman ρ = ${rho >= 0 ? "+" : ""}${rho.toFixed(3)}`);
-                  lines.push(`   → ${sStr}${dStr}相關`);
+                  const ss = Math.abs(rho) >= 0.5 ? "強" : Math.abs(rho) >= 0.3 ? "中等" : "弱";
+                  lines.push(`📊 Spearman ρ = ${rho >= 0 ? "+" : ""}${rho.toFixed(3)}  → ${ss}${rho >= 0 ? "正" : "負"}相關`);
                 }
                 return lines;
               },
