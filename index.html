@@ -1521,17 +1521,17 @@ body.light .subject-input {
                        background:var(--accent,#3498db);color:#fff;cursor:pointer;font-size:0.82rem">
           🕸 分群雷達圖
         </button>
-        <button class="behavior-sub-btn" data-sub="correlation"
-                onclick="BehaviorTabManager.switchSub('correlation', this)"
-                style="padding:5px 14px;border-radius:20px;border:1px solid var(--accent,#3498db);
-                       background:transparent;color:var(--accent,#3498db);cursor:pointer;font-size:0.82rem">
-          📈 相關性分析
-        </button>
         <button class="behavior-sub-btn" data-sub="time"
                 onclick="BehaviorTabManager.switchSub('time', this)"
                 style="padding:5px 14px;border-radius:20px;border:1px solid var(--accent,#3498db);
                        background:transparent;color:var(--accent,#3498db);cursor:pointer;font-size:0.82rem">
           🕐 時間分析
+        </button>
+        <button class="behavior-sub-btn" data-sub="correlation"
+                onclick="BehaviorTabManager.switchSub('correlation', this)"
+                style="padding:5px 14px;border-radius:20px;border:1px solid var(--accent,#3498db);
+                       background:transparent;color:var(--accent,#3498db);cursor:pointer;font-size:0.82rem">
+          📈 相關性分析
         </button>
       </div>
 
@@ -1624,9 +1624,9 @@ body.light .subject-input {
         <div class="behavior-time-grid">
           <div class="chart-card">
             <div class="chart-title" style="--accent-color:var(--accent3)">
-              <span class="dot"></span>考前學習強度
+              <span class="dot"></span>平時及考前學習強度
             </div>
-            <div class="chart-wrap" style="height:160px;position:relative">
+            <div class="chart-wrap" style="height:300px;position:relative">
               <canvas id="preExamChart"></canvas>
             </div>
           </div>
@@ -2249,12 +2249,12 @@ const CHART_INFO = {
     use: '量化學習節律，作為課程設計（作業分散化）的參考依據。',
   },
   preExamChart: {
-    title: '考前學習強度分析',
-    desc: '比較考試週前 1～4 週的學習行為強度，分析學生的備考準備模式。',
+    title: '平時及考前學習強度',
+    desc: '依期中、期末兩段考試期間的平時累積與考前 7 天占比，分析學生的準備模式。',
     points: [
-      '強度集中在考前 1 週 → 高度臨時複習行為，學習深度可能不足',
-      '強度提前至考前 3～4 週 → 有計畫性複習，通常與較佳成效相關',
-      '各週強度相近 → 學習策略較為平穩',
+      '平時占比大於 75% → 平時準備型',
+      '考前 1 週占比大於等於 35% → 高度衝刺型',
+      '考前 1 週占比 10% 至小於 35% → 適度備考型',
     ],
     use: '識別備考模式與成效的關係，引導學生調整學習計畫。',
   },
@@ -4530,7 +4530,7 @@ const PRINT_ITEMS = [
   { id: 'corrHeatmap',           label: '行為指標相關性熱力圖',     tab: 'L', type: 'div',    checked: false },
   { id: 'scatterSection',        label: '行為相關性散佈圖',         tab: 'L', type: 'div',    checked: false },
   { id: 'weeklyQuizChart',       label: '各週題庫作答強度',         tab: 'L', type: 'canvas', checked: false },
-  { id: 'preExamChart',          label: '考前學習強度',             tab: 'L', type: 'canvas', checked: false },
+  { id: 'preExamChart',          label: '平時及考前學習強度',       tab: 'L', type: 'canvas', checked: false },
   { id: 'timeSlotChart',         label: '學習時段分布',             tab: 'L', type: 'canvas', checked: false },
 ];
 
@@ -4864,10 +4864,10 @@ loadData();
 </script>
 
 <!-- ══ Phase 2 學習行為模組 ══ -->
-<script src="js/behavior-loader.js?v=20260507i"></script>
-<script src="js/tab-behavior-radar.js?v=20260507i"></script>
-<script src="js/tab-behavior-correlation.js?v=20260507i"></script>
-<script src="js/tab-behavior-time.js?v=20260507i"></script>
+<script src="js/behavior-loader.js?v=20260508a"></script>
+<script src="js/tab-behavior-radar.js?v=20260508a"></script>
+<script src="js/tab-behavior-correlation.js?v=20260508a"></script>
+<script src="js/tab-behavior-time.js?v=20260508a"></script>
 <script>
 // ── BehaviorTabManager：懶載入協調器 ────────────────────
 const BehaviorTabManager = (() => {
