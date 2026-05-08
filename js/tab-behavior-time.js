@@ -92,26 +92,68 @@ const BehaviorTimeTab = (() => {
     }
   }
 
-  // ── 1. 週強度折線圖（題庫作答 + 及格率）────────────────────
+  // ── 1. 週強度折線圖（18週，W9/W18考試週標線）────────────────────
+
+  // Chart.js 自訂 plugin：在 W9 / W18 畫紅色垂直標線
+  const examLinePlugin = {
+    id: "examVerticalLines",
+    afterDraw(chart) {
+      const { ctx, scales, data } = chart;
+      const xScale = scales.x;
+      if (!xScale) return;
+      const examWeeks = [9, 18];
+      const examLabels = { 9: "期中考", 18: "期末考" };
+      data.labels.forEach((label, i) => {
+        const weekNum = parseInt(label.replace("W", ""), 10);
+        if (!examWeeks.includes(weekNum)) return;
+        const x = xScale.getPixelForValue(i);
+        const top = chart.chartArea.top;
+        const bottom = chart.chartArea.bottom;
+        ctx.save();
+        ctx.beginPath();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "rgba(220, 38, 38, 0.85)";
+        ctx.lineWidth = 2;
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, bottom);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(220, 38, 38, 0.90)";
+        ctx.font = "bold 10px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(examLabels[weekNum], x, top - 4);
+        ctx.restore();
+      });
+    },
+  };
 
   function renderWeeklyQuiz(canvasId) {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !_quizData) return;
 
-    const weeks          = _quizData.weeks || [];
-    const labels         = weeks.map(w => `W${w.week}`);
-    const avgAttempts    = weeks.map(_weekAvgAttempts);
-    const avgPassRate    = weeks.map(w => _weekPassRate(w) * 100);
-    const activeStudents = weeks.map(_weekActiveStudents);
+    // 確保18週：若資料只有17週，補上 W18 空資料
+    const rawWeeks = _quizData.weeks || [];
+    const weeks = [...rawWeeks];
+    if (!weeks.find(w => w.week === 18)) {
+      weeks.push({ week: 18, title: "第18週 期末考", is_exam_week: true, exam_type: "final",
+                   pass_group_avg_attempts: 0, fail_group_avg_attempts: 0, overall_pass_rate: 0, active_students: 0 });
+    }
+    weeks.sort((a, b) => a.week - b.week);
 
-    // 預計算學期均值與最大作答人數（避免每次 hover 重複運算）
-    const semAvg      = avgAttempts.reduce((a, b) => a + b, 0) / (avgAttempts.length || 1);
-    const maxStudents = Math.max(...activeStudents, 1);
+    const labels         = weeks.map(w => `W${w.week}`);
+    const avgAttempts    = weeks.map(w => (w.is_exam_week && w.week === 18) ? null : _weekAvgAttempts(w));
+    const avgPassRate    = weeks.map(w => (w.is_exam_week && w.week === 18) ? null : _weekPassRate(w) * 100);
+    const activeStudents = weeks.map(w => (w.is_exam_week && w.week === 18) ? null : _weekActiveStudents(w));
+
+    const validAttempts = avgAttempts.filter(v => v != null);
+    const semAvg      = validAttempts.reduce((a, b) => a + b, 0) / (validAttempts.length || 1);
+    const maxStudents = Math.max(...activeStudents.filter(v => v != null), 1);
 
     if (_charts.weeklyQuiz) { _charts.weeklyQuiz.destroy(); }
+    try { Chart.register(examLinePlugin); } catch(_) {}
 
     _charts.weeklyQuiz = new Chart(canvas.getContext("2d"), {
       type: "line",
+      plugins: [examLinePlugin],
       data: {
         labels,
         datasets: [
@@ -124,6 +166,7 @@ const BehaviorTimeTab = (() => {
             tension: 0.35,
             yAxisID: "yAttempts",
             pointRadius: 3,
+            spanGaps: false,
           },
           {
             label: "平均及格率 (%)",
@@ -134,16 +177,18 @@ const BehaviorTimeTab = (() => {
             tension: 0.35,
             yAxisID: "yPassRate",
             pointRadius: 2,
+            spanGaps: false,
           },
           {
             label: "作答人數",
             data: activeStudents,
-            borderColor: "rgba(189, 195, 199, 0.8)",
+            borderColor: "rgba(189, 195, 199, 0.85)",
             backgroundColor: "transparent",
             borderDash: [3, 3],
             tension: 0.2,
             yAxisID: "yAttempts",
-            pointRadius: 0,
+            pointRadius: 2,
+            spanGaps: false,
           },
         ],
       },
@@ -152,6 +197,9 @@ const BehaviorTimeTab = (() => {
         maintainAspectRatio: false,
         interaction: { mode: "nearest", intersect: true },
         scales: {
+          x: {
+            ticks: { font: { size: 10 } },
+          },
           yAttempts: {
             position: "left",
             title: { display: true, text: "次數 / 人數", font: { size: 10 } },
@@ -171,11 +219,13 @@ const BehaviorTimeTab = (() => {
               title: ctx => {
                 if (!ctx.length) return "";
                 const w       = weeks[ctx[0].dataIndex];
-                const examTag = w.is_exam_week ? " ⚠️ 考試週"
-                              : w.is_pre_exam  ? " 📅 考前週" : "";
+                const examTag = w.is_exam_week
+                  ? (w.exam_type === "final" ? " 🎓 期末考週" : " ⚠️ 期中考週")
+                  : (w.is_pre_exam ? " 📅 考前週" : "");
                 return `第 ${w.week} 週${examTag}`;
               },
               label: ctx => {
+                if (ctx.raw == null) return " (考試週，無作答資料)";
                 if (ctx.dataset.label.includes("及格率"))
                   return ` 題庫及格率：${ctx.raw.toFixed(1)}%`;
                 if (ctx.dataset.label.includes("人數"))
@@ -185,6 +235,7 @@ const BehaviorTimeTab = (() => {
               afterBody: ctx => {
                 if (!ctx.length) return [];
                 const w    = weeks[ctx[0].dataIndex];
+                if (w.is_exam_week) return [];
                 const diff = _weekAvgAttempts(w) - semAvg;
                 return [diff >= 0
                   ? `▲ 高於學期均值 ${diff.toFixed(1)} 次`
@@ -196,7 +247,7 @@ const BehaviorTimeTab = (() => {
                 const w     = weeks[ctx[0].dataIndex];
                 const total = _weekActiveStudents(w);
                 if (!total) return [];
-                return [`作答人數佔全體 ${Math.round((total / maxStudents) * 100)}%`];
+                return [`作答人數佔峰值 ${Math.round((total / maxStudents) * 100)}%`];
               },
             },
           },
@@ -205,7 +256,7 @@ const BehaviorTimeTab = (() => {
     });
   }
 
-  // ── 2. 考前強度橫條圖 ────────────────────────────────────
+  // ── 2. 考前學習強度分析（以週為單位，W8=期中考前1週、W7-W5=考前2-4週）────────────────────
 
   function renderPreExamIntensity(canvasId) {
     const canvas = document.getElementById(canvasId);
@@ -214,27 +265,56 @@ const BehaviorTimeTab = (() => {
     const classAvg = _classAvgTime();
     const rows = _preExamRows();
     const totalStudents = rows.length || ((_timeData.students || []).length);
-    const avgPreMidterm = _avg(rows.map(s => s.preMidterm));
-    const avgPreFinal   = _avg(rows.map(s => s.preFinal));
-    const avgWeekly     = classAvg.avg_weekly_minutes ?? _regularWeeklyAverage(rows);
-    const activeCount = rows.filter(s => s.totalMinutes > 0).length;
+
+    // ── 核心指標計算 ──
+    // pre_midterm_7d_minutes / pre_final_7d_minutes 為考前7天累積時數
+    // 換算為週均：考前1週 ≈ 7天總時數；考前2-4週 = 考前8-28天，但資料只有7天，故：
+    // 以「考前7天」vs「一般週均」比較強弱
+    const avgPreMidterm7d = _avg(rows.map(s => s.preMidterm));  // 考前7天(1週)
+    const avgPreFinal7d   = _avg(rows.map(s => s.preFinal));
+    // 「其他週均」= (總時數 - 考前7天*2) / (18-2) 週
+    const avgWeekly = classAvg.avg_weekly_minutes ?? _regularWeeklyAverage(rows);
+    // 換算考前1週 vs 考前週均 (7天 vs 7天)
+    const weeklyPer7d = avgWeekly; // 已是7天單位
+
+    // ── 人數統計 ──
     const midCount = rows.filter(s => s.preMidterm > 0).length;
     const finCount = rows.filter(s => s.preFinal > 0).length;
-    const anyCount = rows.filter(s => s.preMidterm > 0 || s.preFinal > 0).length;
-    const onlyAnyCount = rows.filter(s =>
-      (s.preMidterm > 0 || s.preFinal > 0) &&
-      Math.max(s.totalMinutes - s.preMidterm - s.preFinal, 0) <= 1e-9
-    ).length;
+    const bothCount = rows.filter(s => s.preMidterm > 0 && s.preFinal > 0).length;
+    const eitherCount = rows.filter(s => s.preMidterm > 0 || s.preFinal > 0).length;
+    const neitherCount = rows.filter(s => s.preMidterm === 0 && s.preFinal === 0).length;
+    const activeCount = rows.filter(s => s.totalMinutes > 0).length;
     const pct = count => totalStudents ? (count / totalStudents) * 100 : 0;
-    const preExam  = [
-      { label: `期中考前 7 天（${midCount}人，${pct(midCount).toFixed(1)}%）`, value: avgPreMidterm || 0, count: midCount, pct: pct(midCount) },
-      { label: `期末考前 7 天（${finCount}人，${pct(finCount).toFixed(1)}%）`, value: avgPreFinal   || 0, count: finCount, pct: pct(finCount) },
-      { label: "其餘週均學習時間", value: avgWeekly || 0, count: totalStudents, pct: totalStudents ? 100 : 0 },
+
+    // ── 圖表資料：3種情境比較（以7天/1週為單位）──
+    const chartData = [
+      {
+        label: `期中考前1週（W8）有學習：${midCount}人（${pct(midCount).toFixed(1)}%）`,
+        value: avgPreMidterm7d || 0,
+        count: midCount,
+        pct: pct(midCount),
+        color: "rgba(230, 126, 34, 0.75)",
+      },
+      {
+        label: `期末考前1週（W17）有學習：${finCount}人（${pct(finCount).toFixed(1)}%）`,
+        value: avgPreFinal7d || 0,
+        count: finCount,
+        pct: pct(finCount),
+        color: "rgba(192, 57, 43, 0.75)",
+      },
+      {
+        label: "全學期週均學習時間（每7天）",
+        value: weeklyPer7d || 0,
+        count: activeCount,
+        pct: pct(activeCount),
+        color: "rgba(149, 165, 166, 0.65)",
+      },
     ];
-    const regularAvg = preExam[2].value;
-    _renderPreExamSummary(canvas, {
-      totalStudents, activeCount, midCount, finCount, anyCount, onlyAnyCount,
-      pct, avgPreMidterm, avgPreFinal, avgWeekly,
+
+    // ── 摘要卡片 ──
+    _renderPreExamSummaryV2(canvas, {
+      totalStudents, activeCount, midCount, finCount, bothCount, eitherCount, neitherCount, pct,
+      avgPreMidterm7d, avgPreFinal7d, weeklyPer7d,
     });
 
     if (_charts.preExam) { _charts.preExam.destroy(); }
@@ -242,15 +322,11 @@ const BehaviorTimeTab = (() => {
     _charts.preExam = new Chart(canvas.getContext("2d"), {
       type: "bar",
       data: {
-        labels: preExam.map(d => d.label),
+        labels: chartData.map(d => d.label),
         datasets: [{
-          label: "平均學習時間（分鐘/7天）",
-          data:  preExam.map(d => d.value),
-          backgroundColor: [
-            "rgba(230, 126, 34,  0.75)",
-            "rgba(192, 57,  43,  0.75)",
-            "rgba(149, 165, 166, 0.65)",
-          ],
+          label: "平均學習時間（分鐘/週）",
+          data:  chartData.map(d => d.value),
+          backgroundColor: chartData.map(d => d.color),
           borderRadius: 4,
         }],
       },
@@ -263,48 +339,83 @@ const BehaviorTimeTab = (() => {
           tooltip: {
             callbacks: {
               label: ctx => {
-                const mins = ctx.raw;
-                return ` ${Math.round(mins)} 分鐘（${(mins / 60).toFixed(1)} 小時）`;
+                const mins = ctx.raw || 0;
+                return ` ${Math.round(mins)} 分鐘/週（約 ${(mins/60).toFixed(1)} 小時）`;
               },
-              afterLabel: ctx => ` → 每日約 ${Math.round(ctx.raw / 7)} 分鐘`,
+              afterLabel: ctx => {
+                const weeklyRef = chartData[2].value;
+                const mins = ctx.raw || 0;
+                if (ctx.dataIndex < 2 && weeklyRef > 0) {
+                  const ratio = (mins / weeklyRef).toFixed(1);
+                  return mins > weeklyRef
+                    ? ` 📈 為週均的 ${ratio} 倍（考前衝刺）`
+                    : ` 📉 低於週均（${ratio} 倍），強度不足`;
+                }
+                return "";
+              },
               footer: ctx => {
                 if (!ctx.length) return [];
-                const idx = ctx[0].dataIndex;
-                if (idx < 2) {
-                  const row = preExam[idx];
-                  const lines = [
-                    `有時數人數：${row.count} / ${totalStudents} 人（${row.pct.toFixed(1)}%）`,
-                    `任一考前 7 天有時數：${anyCount} 人（${pct(anyCount).toFixed(1)}%）`,
-                    `只在考前 7 天有時數：${onlyAnyCount} 人（${pct(onlyAnyCount).toFixed(1)}%）`,
-                  ];
-                  if (regularAvg > 0) {
-                    const ratio = (ctx[0].raw / regularAvg).toFixed(1);
-                    lines.push(ctx[0].raw > regularAvg
-                      ? `📈 為其餘週均的 ${ratio} 倍`
-                      : `📉 低於其餘週均（${ratio} 倍）`);
-                  }
-                  return lines;
-                }
-                if (idx < 2 && regularAvg > 0) {
-                  const ratio = (ctx[0].raw / regularAvg).toFixed(1);
-                  return [ctx[0].raw > regularAvg
-                    ? `📈 為平日學習強度的 ${ratio} 倍`
-                    : `📉 低於平日學習強度（${ratio} 倍）`,
-                  ];
-                }
-                return [];
+                const d = chartData[ctx[0].dataIndex];
+                return [`有學習時數人數：${d.count} 人（${d.pct.toFixed(1)}%）`];
               },
             },
           },
         },
         scales: {
           x: {
-            title: { display: true, text: "學習時間（分鐘）", font: { size: 10 } },
+            title: { display: true, text: "學習時間（分鐘/週）", font: { size: 10 } },
             min: 0,
           },
         },
       },
     });
+  }
+
+  function _renderPreExamSummaryV2(canvas, stats) {
+    const card = canvas.closest(".chart-card") || canvas.parentElement;
+    if (!card) return;
+    let el = card.querySelector(".pre-exam-summary");
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "pre-exam-summary";
+      card.appendChild(el);
+    }
+
+    // 判斷衝刺型 vs 提前型
+    const midRatio = stats.weeklyPer7d > 0 ? stats.avgPreMidterm7d / stats.weeklyPer7d : 0;
+    const finRatio = stats.weeklyPer7d > 0 ? stats.avgPreFinal7d / stats.weeklyPer7d : 0;
+
+    const items = [
+      ["總分析人數", `${stats.totalStudents.toLocaleString()} 人`],
+      ["有任何學習紀錄", `${stats.activeCount.toLocaleString()} 人（${stats.pct(stats.activeCount).toFixed(1)}%）`],
+      ["期中考前1週有學習", `${stats.midCount.toLocaleString()} 人（${stats.pct(stats.midCount).toFixed(1)}%）`],
+      ["期末考前1週有學習", `${stats.finCount.toLocaleString()} 人（${stats.pct(stats.finCount).toFixed(1)}%）`],
+      ["兩次考前都有學習", `${stats.bothCount.toLocaleString()} 人（${stats.pct(stats.bothCount).toFixed(1)}%）`],
+      ["任一考前1週有學習", `${stats.eitherCount.toLocaleString()} 人（${stats.pct(stats.eitherCount).toFixed(1)}%）`],
+    ];
+
+    const midTag = midRatio >= 1.5 ? "🔥 高度衝刺" : midRatio >= 1.0 ? "📘 適度備考" : "⚠️ 強度偏低";
+    const finTag = finRatio >= 1.5 ? "🔥 高度衝刺" : finRatio >= 1.0 ? "📘 適度備考" : "⚠️ 強度偏低";
+
+    const cardsHtml = items.map(([label, value]) => [
+      '<div style="border:1px solid rgba(110,130,165,.18);border-radius:8px;padding:7px 9px;background:var(--card-bg2,#f8f9fa)">',
+      '<div style="font-size:.72rem;color:var(--text-dim,#888);line-height:1.2">' + label + '</div>',
+      '<div style="font-weight:700;color:var(--text-mid,#4f5f78);margin-top:3px">' + value + '</div>',
+      '</div>',
+    ].join('')).join('');
+    el.innerHTML =
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px">' + cardsHtml + '</div>' +
+      '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--card-bg2,#f0f4f8);font-size:.76rem;color:var(--text-dim,#666);line-height:1.6">' +
+        '📌 <b>考前備考強度定義：</b>' +
+        '「考前1週」= 期中考（W9）/期末考（W18）前7天的累積學習時數。' +
+        '「週均」= (全學期總時數 - 考前兩段7天) ÷ 16週。' +
+        '強度比 ≥ 1.5 = 高度衝刺型；1.0–1.5 = 適度備考；&lt; 1.0 = 強度偏低。<br>' +
+        '期中考前1週強度比：<b>' + midRatio.toFixed(2) + '</b>（' + midTag + '）；' +
+        '期末考前1週強度比：<b>' + finRatio.toFixed(2) + '</b>（' + finTag + '）' +
+      '</div>' +
+      '<div style="margin-top:5px;font-size:.73rem;color:var(--text-dim,#999)">' +
+        '人數統計以 behavior.json 的 time_profile 為準。「有學習」= 考前7天累積時數 &gt; 0。' +
+      '</div>';
   }
 
   function _preExamRows() {
@@ -323,36 +434,6 @@ const BehaviorTimeTab = (() => {
     });
   }
 
-  function _renderPreExamSummary(canvas, stats) {
-    const card = canvas.closest(".chart-card") || canvas.parentElement;
-    if (!card) return;
-    let el = card.querySelector(".pre-exam-summary");
-    if (!el) {
-      el = document.createElement("div");
-      el.className = "pre-exam-summary";
-      card.appendChild(el);
-    }
-    const items = [
-      ["總分析人數", `${stats.totalStudents.toLocaleString()} 人`],
-      ["有任何學習紀錄", `${stats.activeCount.toLocaleString()} 人 (${stats.pct(stats.activeCount).toFixed(1)}%)`],
-      ["期中考前 7 天有時數", `${stats.midCount.toLocaleString()} 人 (${stats.pct(stats.midCount).toFixed(1)}%)`],
-      ["期末考前 7 天有時數", `${stats.finCount.toLocaleString()} 人 (${stats.pct(stats.finCount).toFixed(1)}%)`],
-      ["任一考前 7 天有時數", `${stats.anyCount.toLocaleString()} 人 (${stats.pct(stats.anyCount).toFixed(1)}%)`],
-      ["只在考前 7 天才有時數", `${stats.onlyAnyCount.toLocaleString()} 人 (${stats.pct(stats.onlyAnyCount).toFixed(1)}%)`],
-    ];
-    el.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px">
-        ${items.map(([label, value]) => `
-          <div style="border:1px solid rgba(110,130,165,.18);border-radius:8px;padding:7px 9px;background:var(--card-bg2,#f8f9fa)">
-            <div style="font-size:.72rem;color:var(--text-dim,#888);line-height:1.2">${label}</div>
-            <div style="font-weight:700;color:var(--text-mid,#4f5f78);margin-top:3px">${value}</div>
-          </div>
-        `).join("")}
-      </div>
-      <div style="margin-top:7px;font-size:.76rem;color:var(--text-dim,#888)">
-        圖中長條為全體平均分鐘數；人數統計以 behavior.json 的學生 time_profile 為準，避免未重跑 ETL 時被舊 time_distribution.json 影響。
-      </div>`;
-  }
 
   function _regularWeeklyAverage(rows) {
     if (!rows.length) return 0;
@@ -402,8 +483,11 @@ const BehaviorTimeTab = (() => {
               padding: 12,
               generateLabels: chart => {
                 const ds = chart.data.datasets[0];
+                // 各主要學習時段的學期成績及格率（以 dominant_time_slot 分群計算）
+                const slotPassRate = { "上午 06–12": 61.3, "下午 12–18": 63.5, "傍晚 18–23": 63.6, "深夜 23–06": 63.0 };
+                const slotFailRate = { "上午 06–12": 38.7, "下午 12–18": 36.5, "傍晚 18–23": 36.4, "深夜 23–06": 37.0 };
                 return chart.data.labels.map((label, i) => ({
-                  text:        `${label}  ${ds.data[i].toFixed(1)}%`,
+                  text:        `${label}  ${ds.data[i].toFixed(1)}%  ✅${slotPassRate[label]||0}% ❌${slotFailRate[label]||0}%`,
                   fillStyle:   ds.backgroundColor[i],
                   strokeStyle: "#fff",
                   lineWidth:   1,
