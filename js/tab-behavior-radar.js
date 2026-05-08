@@ -72,6 +72,23 @@ const BehaviorRadarTab = (() => {
   }
   function _formatDateTime(v){if(!v)return"未標示";return String(v).replace("T"," ").slice(0,16);}
 
+  function _mainGradeRows(){
+    const mainData=typeof DATA!=="undefined"?DATA:window.DATA;
+    const students=mainData?.students||{},rows=[];
+    Object.entries(students).forEach(([sourceId,info])=>{
+      (info?.records||[]).forEach(rec=>{
+        rows.push({source_id:sourceId,masked_id:info?.name_masked||sourceId,semester:String(rec.semester||""),final_score:rec.final,semester_score:rec.semester_score});
+      });
+    });
+    return rows;
+  }
+  function _enrichBehaviorStudents(students){
+    const gradeRows=_mainGradeRows();
+    if(!gradeRows.length)return students||[];
+    const byMasked=new Map((students||[]).map(s=>[s.masked_id,s]));
+    return gradeRows.map(g=>({...(byMasked.get(g.masked_id)||{}),...g})).filter(s=>s.masked_id&&s.features);
+  }
+
   /* FIX 1 */
   function _renderBehaviorMetaStrip(){
     const meta=_mergedMeta(),total=_clusterTotal();
@@ -88,7 +105,7 @@ const BehaviorRadarTab = (() => {
     try{
       const[radarData,behaviorData]=await Promise.all([BehaviorLoader.load.radar(),BehaviorLoader.load.behavior().catch(()=>null)]);
       _radarData=radarData;_behaviorMeta=behaviorData?.meta||{};
-      _behaviorStudents=behaviorData?.students||[];_allStudents=_behaviorStudents;
+      _behaviorStudents=_enrichBehaviorStudents(behaviorData?.students||[]);_allStudents=_behaviorStudents;
       _allSemesters=Array.isArray(_behaviorMeta.semesters)&&_behaviorMeta.semesters.length?[..._behaviorMeta.semesters]:[];
       _selectedSemester="all";_selectedCluster="P0";_passFilter="all";_semesterFilterNote=null;
       _renderBehaviorMetaStrip();_renderControls(controlsId);_renderRadar(canvasId);
@@ -141,10 +158,16 @@ const BehaviorRadarTab = (() => {
         _behaviorStudents=bySem.length>0?bySem:_allStudents;
         _semesterFilterNote=null;
       }else{
-        // 無分年資料：保留跨年總量，顯示提示
+        // 無 ETL 分年資料時，若學生明細可辨識年度，就以前端即時計算。
         _radarData={...base,_base:base};
-        _behaviorStudents=_allStudents;
-        _semesterFilterNote=`⚠ ${_formatSemester(semester)} 無獨立分年資料，目前顯示跨年總量（ETL 尚未產出 by_semester）`;
+        const bySem=_allStudents.filter(s=>String(s.semester||"").replace(/-/g,"")==String(semester).replace(/-/g,""));
+        if(bySem.length>0){
+          _behaviorStudents=bySem;
+          _semesterFilterNote=`ℹ ${_formatSemester(semester)} 以學生明細即時計算；重跑新版 ETL 後會產出 by_semester 加速載入`;
+        }else{
+          _behaviorStudents=_allStudents;
+          _semesterFilterNote=`⚠ ${_formatSemester(semester)} 無獨立分年資料，目前顯示跨年總量（ETL 尚未產出 by_semester）`;
+        }
       }
     }
     _renderBehaviorMetaStrip();_passFilter="all";
@@ -158,7 +181,7 @@ const BehaviorRadarTab = (() => {
     const students=_behaviorStudents;if(!students||!students.length)return null;
     const filtered=students.filter(s=>{
       if(clusterKey!=="P0"&&s.cluster!==clusterKey)return false;
-      if(passKey!=="all"){const sc=s.final_score??null;const scNum=Number(sc);const isPassing=Number.isFinite(scNum)&&scNum>=60;if(passKey==="pass"&&!isPassing)return false;if(passKey==="fail"&&isPassing)return false;}
+      if(passKey!=="all"){const sc=s.final_score??s.semester_score??null;const scNum=Number(sc);const isPassing=Number.isFinite(scNum)&&scNum>=60;if(passKey==="pass"&&!isPassing)return false;if(passKey==="fail"&&isPassing)return false;}
       return true;
     });
     if(!filtered.length)return null;

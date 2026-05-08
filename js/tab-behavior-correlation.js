@@ -45,6 +45,7 @@ const BehaviorCorrelationTab = (() => {
   // ── 篩選狀態 ─────────────────────────────────────────────
   let _allScatterData   = null;   // 全量 scatter_data（篩選的基底）
   let _behaviorByMasked = null;   // masked_id → behavior student（用於 join cluster）
+  let _behaviorByAnon   = null;   // anon_id → behavior student（masked_id 可能重複，優先使用 anon_id）
   let _allSemesters     = [];     // 可用學期列表
   let _filterSemester   = "all";  // 目前學期篩選
   let _filterCluster    = "all";  // 目前分群篩選
@@ -127,43 +128,26 @@ const BehaviorCorrelationTab = (() => {
     return ["midterm_score", "final_score"];
   }
 
-  function _pickGradeRecord(records, targetSemester) {
-    const usable = (records || []).filter(rec => {
-      if (targetSemester && String(rec.semester || "") !== String(targetSemester)) return false;
-      return _toNumber(rec.midterm) !== null ||
-        _toNumber(rec.final) !== null ||
-        _toNumber(rec.semester_score) !== null;
-    });
-    if (!usable.length) return null;
-    usable.sort((a, b) => {
-      const scoreA = (_toNumber(a.midterm) !== null ? 1 : 0) +
-        (_toNumber(a.final) !== null ? 1 : 0) +
-        (_toNumber(a.semester_score) !== null ? 1 : 0);
-      const scoreB = (_toNumber(b.midterm) !== null ? 1 : 0) +
-        (_toNumber(b.final) !== null ? 1 : 0) +
-        (_toNumber(b.semester_score) !== null ? 1 : 0);
-      if (scoreA !== scoreB) return scoreB - scoreA;
-      return String(b.semester || "").localeCompare(String(a.semester || ""));
-    });
-    return usable[0];
-  }
-
-  function _gradeMapFromData(mainData, targetSemester) {
-    const map = new Map();
+  function _gradeRowsFromData(mainData, targetSemester) {
+    const rows = [];
     const students = mainData?.students || {};
     Object.entries(students).forEach(([sourceId, info]) => {
-      const rec = _pickGradeRecord(info?.records, targetSemester);
-      if (!rec) return;
-      const row = {
-        masked_id: info?.name_masked || sourceId,
-        midterm_score: _toNumber(rec.midterm),
-        final_score: _toNumber(rec.final),
-        semester_score: _toNumber(rec.semester_score),
-      };
-      map.set(sourceId, row);
-      map.set(row.masked_id, row);
+      (info?.records || []).forEach(rec => {
+        if (targetSemester && String(rec.semester || "") !== String(targetSemester)) return;
+        if (_toNumber(rec.midterm) === null &&
+            _toNumber(rec.final) === null &&
+            _toNumber(rec.semester_score) === null) return;
+        rows.push({
+          source_id: sourceId,
+          masked_id: info?.name_masked || sourceId,
+          semester: String(rec.semester || ""),
+          midterm_score: _toNumber(rec.midterm),
+          final_score: _toNumber(rec.final),
+          semester_score: _toNumber(rec.semester_score),
+        });
+      });
     });
-    return map;
+    return rows;
   }
 
   function _pearsonValue(rows, feat, target) {
@@ -230,37 +214,25 @@ const BehaviorCorrelationTab = (() => {
 
     const behavior = await BehaviorLoader.loadBehaviorData();
     const students = behavior.students || [];
-    const targetSemester = sourceData?.meta?.semester || behavior.meta?.semester || mainData?.meta?.semester || "";
-    let gradeMap = _gradeMapFromData(mainData, targetSemester);
+    const targetSemester = "";
+    const gradeRows = _gradeRowsFromData(mainData, targetSemester);
     const targets = _targetList(sourceData);
     const features = _featureListFromBehavior(students, sourceData);
+    const byAnon = new Map(students.map(s => [s.anon_id, s]));
+    const byMasked = new Map(students.map(s => [s.masked_id, s]));
 
-    let joined = students.map(s => {
-      const grades = gradeMap.get(s.masked_id);
-      if (!grades) return null;
+    const joined = gradeRows.map(grades => {
+      const s = byAnon.get(grades.anon_id) || byMasked.get(grades.masked_id);
+      if (!s) return null;
       return {
         anon_id: s.anon_id,
         masked_id: s.masked_id,
+        semester: grades.semester || s.semester || "",
         cluster: s.cluster || "",
         features: s.features || {},
         ...grades,
       };
     }).filter(Boolean);
-
-    if (!joined.length && targetSemester) {
-      gradeMap = _gradeMapFromData(mainData, "");
-      joined = students.map(s => {
-        const grades = gradeMap.get(s.masked_id);
-        if (!grades) return null;
-        return {
-          anon_id: s.anon_id,
-          masked_id: s.masked_id,
-          cluster: s.cluster || "",
-          features: s.features || {},
-          ...grades,
-        };
-      }).filter(Boolean);
-    }
 
     if (!joined.length) return sourceData;
 
@@ -280,6 +252,7 @@ const BehaviorCorrelationTab = (() => {
       scatter_data: joined,
       meta: {
         ...(sourceData?.meta || {}),
+        semesters: sourceData?.meta?.semesters || mainData?.meta?.semesters || behavior.meta?.semesters || [],
         rebuilt_in_browser: true,
         joined_students: joined.length,
       },
@@ -298,22 +271,30 @@ const BehaviorCorrelationTab = (() => {
       ]);
 
       _corrData = corrRaw;
-      if (!_hasUsableCorrelation(_corrData)) {
+      const rawScatter = _corrData?.scatter_data || [];
+      const needsRebuild = !_hasUsableCorrelation(_corrData) ||
+        (Array.isArray(rawScatter) && rawScatter.length > 0 &&
+          (!rawScatter.some(r => r.semester) || !rawScatter.some(r => r.cluster)));
+      if (needsRebuild) {
         _corrData = await _rebuildCorrelationFromMainData(_corrData);
       }
 
       // 建立 masked_id → behavior student 索引（取得 cluster）
       const bStudents = behaviorData?.students || [];
       _behaviorByMasked = new Map(bStudents.map(s => [s.masked_id, s]));
+      _behaviorByAnon = new Map(bStudents.map(s => [s.anon_id, s]));
 
       // 備份全量並 join cluster 欄位
       const raw = _corrData?.scatter_data || [];
       _allScatterData = Array.isArray(raw)
-        ? raw.map(row => ({
-            ...row,
-            cluster: row.cluster || _behaviorByMasked.get(row.masked_id)?.cluster || "",
-            semester: row.semester || "",
-          }))
+        ? raw.map(row => {
+            const behaviorRow = _behaviorByAnon.get(row.anon_id) || _behaviorByMasked.get(row.masked_id);
+            return {
+              ...row,
+              cluster: row.cluster || behaviorRow?.cluster || "",
+              semester: row.semester || behaviorRow?.semester || "",
+            };
+          })
         : raw;
 
       // 收集可用學期（從 meta）
