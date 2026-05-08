@@ -463,7 +463,7 @@ const BehaviorCorrelationTab = (() => {
         </table>
       </div>
       <p class="text-muted small mb-0">
-        點擊儲存格可查看散佈圖。色彩：
+        點擊儲存格可查看散佈圖（${isSpearman?"Spearman ρ":"Pearson r"}）。色彩：
         <span style="background:${_rToColor(0.6)};color:#fff;padding:1px 6px;border-radius:3px">強正相關</span>
         <span style="background:${_rToColor(-0.6)};color:#fff;padding:1px 6px;border-radius:3px;margin-left:4px">強負相關</span>
         <span style="background:${_rToColor(0)};color:#333;padding:1px 6px;border-radius:3px;margin-left:4px">無相關</span>
@@ -590,13 +590,25 @@ const BehaviorCorrelationTab = (() => {
                 ];
               },
               footer: ctx => {
-                if (!ctx.length || r == null) return [];
-                const strength = Math.abs(r) >= 0.5 ? "強" : Math.abs(r) >= 0.3 ? "中等" : "弱";
-                const dir      = r >= 0 ? "正" : "負";
-                return [
-                  `📈 Pearson r = ${r >= 0 ? "+" : ""}${r.toFixed(3)}`,
-                  `   → ${strength}${dir}相關`,
-                ];
+                if (!ctx.length) return [];
+                const lines = [];
+                if (r != null) {
+                  const strength = Math.abs(r) >= 0.5 ? "強" : Math.abs(r) >= 0.3 ? "中等" : "弱";
+                  const dir      = r >= 0 ? "正" : "負";
+                  lines.push(`📈 Pearson r = ${r >= 0 ? "+" : ""}${r.toFixed(3)}`);
+                  lines.push(`   → ${strength}${dir}相關`);
+                }
+                const rho = _spearmanValue(
+                  _scatterRows(feat, gradeCol).map(d => ({ features: { [feat]: d.x }, [gradeCol]: d.y })),
+                  feat, gradeCol
+                );
+                if (rho != null) {
+                  const sStr = Math.abs(rho) >= 0.5 ? "強" : Math.abs(rho) >= 0.3 ? "中等" : "弱";
+                  const dStr = rho >= 0 ? "正" : "負";
+                  lines.push(`📊 Spearman ρ = ${rho >= 0 ? "+" : ""}${rho.toFixed(3)}`);
+                  lines.push(`   → ${sStr}${dStr}相關`);
+                }
+                return lines;
               },
             },
           },
@@ -605,5 +617,5 @@ const BehaviorCorrelationTab = (() => {
     });
   }
 
-  return { init, showScatter, onFilterChange };
+  return { init, showScatter, onFilterChange, setCorrType };
 })();
