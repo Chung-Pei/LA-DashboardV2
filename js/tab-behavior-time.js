@@ -538,14 +538,31 @@ const BehaviorTimeTab = (() => {
         <div style="font-weight:700;color:var(--text-mid,#4f5f78);margin-top:3px">${value}</div>
       </div>`).join("");
 
+    const semLabel     = _filterSemester === "all" ? "全部年度" : _formatSemLabel(_filterSemester);
+    const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
+    const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
+    const filterBadge  =
+      `<div style="margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
+      `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
+      `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
+      `<span style="margin-right:8px">📅 ${semLabel}</span>` +
+      `<span style="margin-right:8px">👥 ${clusterLabel}</span>` +
+      `<span>✅ ${passLabel}</span>` +
+      `</div>`;
+
     el.innerHTML =
+      filterBadge +
       `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px">${cardHtml}</div>` +
       '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--card-bg2,#f0f4f8);font-size:.76rem;color:var(--text-dim,#666);line-height:1.6">' +
-        '<b>平時及考前學習強度定義（規格書 V2.1）：</b>' +
-        '考前佔比（P<sub>pre</sub>）= 考前7天時數 ÷ 統計期間總時數。' +
-        '先排除總時數低於 P15 門檻者歸為「學習低投入型」；' +
-        '其餘依 P<sub>pre</sub> 區分：≥30% → 高度衝刺型；10%–30% → 規律分散型；&lt;10% → 提早完成型。' +
-        `（本次 P15 門檻：期中 ${Math.round(p15Mid)} 分鐘、期末 ${Math.round(p15Final)} 分鐘）` +
+        '<b>平時及考前學習強度分型定義（規格書 V2.1）：</b><br>' +
+        '核心指標：<b>T<sub>total</sub></b>（統計期間總閱讀時數）、<b>T<sub>pre</sub></b>（考前7天累計時數）、' +
+        '<b>P<sub>pre</sub></b> = T<sub>pre</sub> ÷ T<sub>total</sub> × 100%。<br>' +
+        '判定優先順序（MECE）：' +
+        '<b>① 學習低投入型</b>：T<sub>total</sub> &lt; P15 門檻（全體最低15%），學習量不足，不分析節奏；' +
+        '<b>② 高度衝刺型</b>：P<sub>pre</sub> ≥ 30%（集中學習 Massed Practice）；' +
+        '<b>③ 規律分散型</b>：10% ≤ P<sub>pre</sub> &lt; 30%（分散學習 Distributed Practice）；' +
+        '<b>④ 提早完成型</b>：P<sub>pre</sub> &lt; 10%（前置規劃 Pre-planning）。<br>' +
+        `本次 P15 門檻：期中 ${Math.round(p15Mid)} 分鐘、期末 ${Math.round(p15Final)} 分鐘。` +
       '</div>' +
       '<div style="margin-top:5px;font-size:.73rem;color:var(--text-dim,#999)">' +
         '外圈 = 期末考；內圈 = 期中考。若資料未含考試分段時數，以總閱讀時數與考前7天時數估算，重跑 ETL 可取得精準值。' +
@@ -560,6 +577,28 @@ const BehaviorTimeTab = (() => {
     const slots = Object.keys(SLOT_LABELS);
     const values = slots.map(slot => _avg(rows.map(row => _num(row.timeSlotDistribution?.[slot]))) * 100);
     const totalDaily = _avg(rows.map(row => row.totalMinutes / Math.max(row.activeWeeks || 1, 1)));
+
+    // 在圖表 card 頂部插入篩選條件 badge
+    const card = canvas.closest(".chart-card") || canvas.parentElement;
+    if (card) {
+      let badgeEl = card.querySelector(".time-slot-filter-badge");
+      if (!badgeEl) {
+        badgeEl = document.createElement("div");
+        badgeEl.className = "time-slot-filter-badge";
+        canvas.parentElement.insertBefore(badgeEl, canvas);
+      }
+      const semLabel     = _filterSemester === "all" ? "全部年度" : _formatSemLabel(_filterSemester);
+      const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
+      const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
+      badgeEl.innerHTML =
+        `<div style="margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
+        `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
+        `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
+        `<span style="margin-right:8px">📅 ${semLabel}</span>` +
+        `<span style="margin-right:8px">👥 ${clusterLabel}</span>` +
+        `<span>✅ ${passLabel}</span>` +
+        `</div>`;
+    }
 
     if (_charts.timeSlot) { _charts.timeSlot.destroy(); }
 
