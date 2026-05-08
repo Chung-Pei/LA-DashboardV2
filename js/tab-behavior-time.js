@@ -286,6 +286,22 @@ const BehaviorTimeTab = (() => {
     const activeCount = rows.filter(s => s.totalMinutes > 0).length;
     const pct = count => totalStudents ? (count / totalStudents) * 100 : 0;
 
+    // ── 強度分群：以強度比（考前7天 / 週均）分為三群 ──
+    const _cramRatio = s => weeklyPer7d > 0 ? s.preMidterm / weeklyPer7d : 0;
+    const _finalRatio = s => weeklyPer7d > 0 ? s.preFinal / weeklyPer7d : 0;
+    // 期中考分群
+    const midHigh   = rows.filter(s => s.preMidterm > 0 && _cramRatio(s) >= 1.5).length;
+    const midMid    = rows.filter(s => s.preMidterm > 0 && _cramRatio(s) >= 1.0 && _cramRatio(s) < 1.5).length;
+    const midLow    = rows.filter(s => s.preMidterm > 0 && _cramRatio(s) < 1.0).length;
+    // 期末考分群
+    const finHigh   = rows.filter(s => s.preFinal > 0 && _finalRatio(s) >= 1.5).length;
+    const finMid    = rows.filter(s => s.preFinal > 0 && _finalRatio(s) >= 1.0 && _finalRatio(s) < 1.5).length;
+    const finLow    = rows.filter(s => s.preFinal > 0 && _finalRatio(s) < 1.0).length;
+
+    const midRatio = weeklyPer7d > 0 ? avgPreMidterm7d / weeklyPer7d : 0;
+    const finRatio = weeklyPer7d > 0 ? avgPreFinal7d / weeklyPer7d : 0;
+    const _intensityTag = r => r >= 1.5 ? "🔥 高度衝刺" : r >= 1.0 ? "📘 適度備考" : "⚠️ 強度偏低";
+
     // ── 圖表資料：3種情境比較（以7天/1週為單位）──
     const chartData = [
       {
@@ -294,6 +310,8 @@ const BehaviorTimeTab = (() => {
         count: midCount,
         pct: pct(midCount),
         color: "rgba(230, 126, 34, 0.75)",
+        high: midHigh, mid: midMid, low: midLow,
+        ratio: midRatio,
       },
       {
         label: `期末考前1週（W17）有學習：${finCount}人（${pct(finCount).toFixed(1)}%）`,
@@ -301,6 +319,8 @@ const BehaviorTimeTab = (() => {
         count: finCount,
         pct: pct(finCount),
         color: "rgba(192, 57, 43, 0.75)",
+        high: finHigh, mid: finMid, low: finLow,
+        ratio: finRatio,
       },
       {
         label: "全學期週均學習時間（每7天）",
@@ -308,6 +328,7 @@ const BehaviorTimeTab = (() => {
         count: activeCount,
         pct: pct(activeCount),
         color: "rgba(149, 165, 166, 0.65)",
+        high: null, mid: null, low: null, ratio: null,
       },
     ];
 
@@ -315,6 +336,7 @@ const BehaviorTimeTab = (() => {
     _renderPreExamSummaryV2(canvas, {
       totalStudents, activeCount, midCount, finCount, bothCount, eitherCount, neitherCount, pct,
       avgPreMidterm7d, avgPreFinal7d, weeklyPer7d,
+      midHigh, midMid, midLow, finHigh, finMid, finLow,
     });
 
     if (_charts.preExam) { _charts.preExam.destroy(); }
@@ -348,15 +370,21 @@ const BehaviorTimeTab = (() => {
                 if (ctx.dataIndex < 2 && weeklyRef > 0) {
                   const ratio = (mins / weeklyRef).toFixed(1);
                   return mins > weeklyRef
-                    ? ` 📈 為週均的 ${ratio} 倍（考前衝刺）`
-                    : ` 📉 低於週均（${ratio} 倍），強度不足`;
+                    ? ` 📈 為週均的 ${ratio} 倍（${_intensityTag(parseFloat(ratio))}）`
+                    : ` 📉 低於週均（${ratio} 倍），強度偏低`;
                 }
                 return "";
               },
               footer: ctx => {
                 if (!ctx.length) return [];
                 const d = chartData[ctx[0].dataIndex];
-                return [`有學習時數人數：${d.count} 人（${d.pct.toFixed(1)}%）`];
+                const lines = [`有學習時數人數：${d.count} 人（${d.pct.toFixed(1)}%）`];
+                if (d.high !== null) {
+                  lines.push(`  🔥 高度衝刺（≥1.5x）：${d.high} 人（${pct(d.high).toFixed(1)}%）`);
+                  lines.push(`  📘 適度備考（1.0–1.5x）：${d.mid} 人（${pct(d.mid).toFixed(1)}%）`);
+                  lines.push(`  ⚠️  強度偏低（<1.0x）：${d.low} 人（${pct(d.low).toFixed(1)}%）`);
+                }
+                return lines;
               },
             },
           },
@@ -381,21 +409,21 @@ const BehaviorTimeTab = (() => {
       card.appendChild(el);
     }
 
-    // 判斷衝刺型 vs 提前型
     const midRatio = stats.weeklyPer7d > 0 ? stats.avgPreMidterm7d / stats.weeklyPer7d : 0;
     const finRatio = stats.weeklyPer7d > 0 ? stats.avgPreFinal7d / stats.weeklyPer7d : 0;
+    const midTag = midRatio >= 1.5 ? "🔥 高度衝刺" : midRatio >= 1.0 ? "📘 適度備考" : "⚠️ 強度偏低";
+    const finTag = finRatio >= 1.5 ? "🔥 高度衝刺" : finRatio >= 1.0 ? "📘 適度備考" : "⚠️ 強度偏低";
 
     const items = [
       ["總分析人數", `${stats.totalStudents.toLocaleString()} 人`],
       ["有任何學習紀錄", `${stats.activeCount.toLocaleString()} 人（${stats.pct(stats.activeCount).toFixed(1)}%）`],
-      ["期中考前1週有學習", `${stats.midCount.toLocaleString()} 人（${stats.pct(stats.midCount).toFixed(1)}%）`],
-      ["期末考前1週有學習", `${stats.finCount.toLocaleString()} 人（${stats.pct(stats.finCount).toFixed(1)}%）`],
-      ["兩次考前都有學習", `${stats.bothCount.toLocaleString()} 人（${stats.pct(stats.bothCount).toFixed(1)}%）`],
-      ["任一考前1週有學習", `${stats.eitherCount.toLocaleString()} 人（${stats.pct(stats.eitherCount).toFixed(1)}%）`],
+      ["期中 🔥 高度衝刺（≥1.5x）", `${stats.midHigh} 人（${stats.pct(stats.midHigh).toFixed(1)}%）`],
+      ["期中 📘 適度備考（1.0–1.5x）", `${stats.midMid} 人（${stats.pct(stats.midMid).toFixed(1)}%）`],
+      ["期中 ⚠️ 強度偏低（<1.0x）", `${stats.midLow} 人（${stats.pct(stats.midLow).toFixed(1)}%）`],
+      ["期末 🔥 高度衝刺（≥1.5x）", `${stats.finHigh} 人（${stats.pct(stats.finHigh).toFixed(1)}%）`],
+      ["期末 📘 適度備考（1.0–1.5x）", `${stats.finMid} 人（${stats.pct(stats.finMid).toFixed(1)}%）`],
+      ["期末 ⚠️ 強度偏低（<1.0x）", `${stats.finLow} 人（${stats.pct(stats.finLow).toFixed(1)}%）`],
     ];
-
-    const midTag = midRatio >= 1.5 ? "🔥 高度衝刺" : midRatio >= 1.0 ? "📘 適度備考" : "⚠️ 強度偏低";
-    const finTag = finRatio >= 1.5 ? "🔥 高度衝刺" : finRatio >= 1.0 ? "📘 適度備考" : "⚠️ 強度偏低";
 
     const cardsHtml = items.map(([label, value]) => [
       '<div style="border:1px solid rgba(110,130,165,.18);border-radius:8px;padding:7px 9px;background:var(--card-bg2,#f8f9fa)">',
@@ -487,7 +515,7 @@ const BehaviorTimeTab = (() => {
                 const slotPassRate = { "上午 06–12": 61.3, "下午 12–18": 63.5, "傍晚 18–23": 63.6, "深夜 23–06": 63.0 };
                 const slotFailRate = { "上午 06–12": 38.7, "下午 12–18": 36.5, "傍晚 18–23": 36.4, "深夜 23–06": 37.0 };
                 return chart.data.labels.map((label, i) => ({
-                  text:        `${label}  ${ds.data[i].toFixed(1)}%  ✅${slotPassRate[label]||0}% ❌${slotFailRate[label]||0}%`,
+                  text:        `${label}  ${ds.data[i].toFixed(1)}%  │ 及格:${slotPassRate[label]||0}% 不及格:${slotFailRate[label]||0}%`,
                   fillStyle:   ds.backgroundColor[i],
                   strokeStyle: "#fff",
                   lineWidth:   1,
