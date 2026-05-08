@@ -38,11 +38,12 @@ const BehaviorTimeTab = (() => {
     P5: "被動低參與型",
   };
 
+  // 分型對應規格書 V2.1：優先級 low_invest > crammer > consistent > early
   const PREP_TYPES = [
-    { key: "steady", label: "平時準備型", color: "rgba(46, 204, 113, 0.78)" },
-    { key: "high_cram", label: "高度衝刺型", color: "rgba(231, 76, 60, 0.78)" },
-    { key: "moderate", label: "適度備考型", color: "rgba(52, 152, 219, 0.78)" },
-    { key: "low", label: "考試低準備型", color: "rgba(149, 165, 166, 0.72)" },
+    { key: "low_invest",  label: "學習低投入型", color: "rgba(158, 158, 158, 0.85)" }, // #9E9E9E
+    { key: "crammer",     label: "高度衝刺型",   color: "rgba(255, 82,  82,  0.85)" }, // #FF5252
+    { key: "consistent",  label: "規律分散型",   color: "rgba(76,  175, 80,  0.85)" }, // #4CAF50
+    { key: "early",       label: "提早完成型",   color: "rgba(33,  150, 243, 0.85)" }, // #2196F3
   ];
 
   let _quizData = null;
@@ -413,15 +414,35 @@ const BehaviorTimeTab = (() => {
     return { pre, regular, period: Math.max(period, pre + regular, 0) };
   }
 
-  function _prepType(row, exam) {
-    const { pre, regular, period } = _periodValues(row, exam);
-    if (period <= 0) return "low";
-    const regularRatio = regular / period;
+  /**
+   * 依規格書 V2.1 判定分型（優先級順序 MECE）：
+   * 步驟一：T_total < P15 → 學習低投入型
+   * 步驟二：P_pre >= 30% → 高度衝刺型
+   *         10% <= P_pre < 30% → 規律分散型
+   *         P_pre < 10% → 提早完成型
+   *
+   * @param {object} row      - 學生資料列
+   * @param {'midterm'|'final'} exam
+   * @param {number} p15      - 全體學生 T_total 的 P15 門檻值（分鐘）
+   */
+  function _prepType(row, exam, p15 = 0) {
+    const { pre, period } = _periodValues(row, exam);
+    // 步驟一：低投入排除（以 period 代表該考試區間的 T_total）
+    if (period <= 0 || period < p15) return "low_invest";
     const preRatio = pre / period;
-    if (regularRatio > 0.75) return "steady";
-    if (preRatio >= 0.35) return "high_cram";
-    if (preRatio >= 0.10) return "moderate";
-    return "low";
+    // 步驟二：依 P_pre 區分
+    if (preRatio >= 0.30) return "crammer";
+    if (preRatio >= 0.10) return "consistent";
+    return "early";
+  }
+
+  /** 計算全體（未篩選）學生某考試區間 period 的 P15 門檻值 */
+  function _calcP15(exam) {
+    const all = _studentRows(false);
+    const periods = all.map(r => _periodValues(r, exam).period).filter(v => v > 0).sort((a, b) => a - b);
+    if (!periods.length) return 0;
+    const idx = Math.floor(periods.length * 0.15);
+    return periods[Math.min(idx, periods.length - 1)];
   }
 
   function renderPreExamIntensity(canvasId) {
@@ -430,37 +451,56 @@ const BehaviorTimeTab = (() => {
     const rows = _filteredStudentRows();
     const exams = [
       { key: "midterm", label: "期中考" },
-      { key: "final", label: "期末考" },
+      { key: "final",   label: "期末考" },
     ];
-    const labels = exams.flatMap(exam => PREP_TYPES.map(t => `${exam.label} ${t.label}`));
-    const counts = exams.flatMap(exam => PREP_TYPES.map(t => rows.filter(row => _prepType(row, exam.key) === t.key).length));
-    const colors = exams.flatMap(() => PREP_TYPES.map(t => t.color));
 
-    _renderPreExamSummary(canvas, rows, counts);
+    // 依規格書：P15 需以全體學生計算，不受篩選影響
+    const p15Mid = _calcP15("midterm");
+    const p15Final = _calcP15("final");
+
+    // 每個考試獨立統計 4 分型人數 → 用兩個 Doughnut
+    const midCounts   = PREP_TYPES.map(t => rows.filter(r => _prepType(r, "midterm", p15Mid)   === t.key).length);
+    const finalCounts = PREP_TYPES.map(t => rows.filter(r => _prepType(r, "final",   p15Final)  === t.key).length);
+    const allCounts   = [...midCounts, ...finalCounts]; // for summary cards
+
+    _renderPreExamSummary(canvas, rows, allCounts, p15Mid, p15Final);
 
     if (_charts.preExam) { _charts.preExam.destroy(); }
+
+    // 使用 Doughnut（規格書建議），以兩組資料集分期中/期末
     _charts.preExam = new Chart(canvas.getContext("2d"), {
-      type: "bar",
+      type: "doughnut",
       data: {
-        labels,
-        datasets: [{
-          label: "人數",
-          data: counts,
-          backgroundColor: colors,
-          borderRadius: 4,
-        }],
+        labels: PREP_TYPES.map(t => t.label),
+        datasets: [
+          {
+            label: "期中考",
+            data: midCounts,
+            backgroundColor: PREP_TYPES.map(t => t.color),
+            borderWidth: 2,
+            hoverOffset: 8,
+          },
+          {
+            label: "期末考",
+            data: finalCounts,
+            backgroundColor: PREP_TYPES.map(t => t.color.replace("0.85", "0.45")),
+            borderWidth: 2,
+            hoverOffset: 8,
+          },
+        ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        scales: {
-          y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: "人數", font: { size: 10 } } },
-          x: { ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 0 } },
-        },
+        cutout: "50%",
         plugins: {
-          legend: { display: false },
+          legend: {
+            position: "bottom",
+            labels: { font: { size: 11 }, padding: 12, boxWidth: 22, boxHeight: 10 },
+          },
           tooltip: {
             callbacks: {
+              title: ctx => `${ctx[0].dataset.label}・${ctx[0].label}`,
               label: ctx => {
                 const total = rows.length || 1;
                 const count = ctx.raw || 0;
@@ -473,7 +513,7 @@ const BehaviorTimeTab = (() => {
     });
   }
 
-  function _renderPreExamSummary(canvas, rows, counts) {
+  function _renderPreExamSummary(canvas, rows, counts, p15Mid, p15Final) {
     const card = canvas.closest(".chart-card") || canvas.parentElement;
     if (!card) return;
     let el = card.querySelector(".pre-exam-summary");
@@ -483,12 +523,15 @@ const BehaviorTimeTab = (() => {
       card.appendChild(el);
     }
     const total = rows.length || 1;
+    // counts 順序：[mid×4, final×4]，各組順序同 PREP_TYPES：low_invest/crammer/consistent/early
+    const midLow   = counts[0] || 0, midCram  = counts[1] || 0;
+    const finalLow = counts[4] || 0, finalCram = counts[5] || 0;
     const cardHtml = [
-      ["分析人數", `${rows.length.toLocaleString()} 人`],
-      ["期中平時準備型", `${counts[0] || 0} 人（${(((counts[0] || 0) / total) * 100).toFixed(1)}%）`],
-      ["期中高度衝刺型", `${counts[1] || 0} 人（${(((counts[1] || 0) / total) * 100).toFixed(1)}%）`],
-      ["期末平時準備型", `${counts[4] || 0} 人（${(((counts[4] || 0) / total) * 100).toFixed(1)}%）`],
-      ["期末高度衝刺型", `${counts[5] || 0} 人（${(((counts[5] || 0) / total) * 100).toFixed(1)}%）`],
+      ["分析人數",          `${rows.length.toLocaleString()} 人`],
+      ["期中 學習低投入型",  `${midLow}  人（${(midLow  / total * 100).toFixed(1)}%）`],
+      ["期中 高度衝刺型",    `${midCram} 人（${(midCram / total * 100).toFixed(1)}%）`],
+      ["期末 學習低投入型",  `${finalLow}  人（${(finalLow  / total * 100).toFixed(1)}%）`],
+      ["期末 高度衝刺型",    `${finalCram} 人（${(finalCram / total * 100).toFixed(1)}%）`],
     ].map(([label, value]) => `
       <div style="border:1px solid rgba(110,130,165,.18);border-radius:8px;padding:7px 9px;background:var(--card-bg2,#f8f9fa)">
         <div style="font-size:.72rem;color:var(--text-dim,#888);line-height:1.2">${label}</div>
@@ -498,15 +541,14 @@ const BehaviorTimeTab = (() => {
     el.innerHTML =
       `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px">${cardHtml}</div>` +
       '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--card-bg2,#f0f4f8);font-size:.76rem;color:var(--text-dim,#666);line-height:1.6">' +
-        '<b>平時及考前學習強度定義：</b>' +
-        '平時 = 考前一週之前；考前1週 = 考前7天。' +
-        '若平時累計大於該考試期間總閱讀時數 75%，歸為「平時準備型」；' +
-        '若考前1週佔比大於等於 35%，歸為「高度衝刺型」；' +
-        '若考前1週佔比 10% 至小於 35%，歸為「適度備考型」；' +
-        '若考前1週佔比小於 10%，歸為「考試低準備型」。' +
+        '<b>平時及考前學習強度定義（規格書 V2.1）：</b>' +
+        '考前佔比（P<sub>pre</sub>）= 考前7天時數 ÷ 統計期間總時數。' +
+        '先排除總時數低於 P15 門檻者歸為「學習低投入型」；' +
+        '其餘依 P<sub>pre</sub> 區分：≥30% → 高度衝刺型；10%–30% → 規律分散型；&lt;10% → 提早完成型。' +
+        `（本次 P15 門檻：期中 ${Math.round(p15Mid)} 分鐘、期末 ${Math.round(p15Final)} 分鐘）` +
       '</div>' +
       '<div style="margin-top:5px;font-size:.73rem;color:var(--text-dim,#999)">' +
-        '若資料尚未包含考試期間分段時數，新版前端會以總閱讀時數與考前7天時數估算；重跑新版 ETL 後可取得精準分段。' +
+        '外圈 = 期末考；內圈 = 期中考。若資料未含考試分段時數，以總閱讀時數與考前7天時數估算，重跑 ETL 可取得精準值。' +
       '</div>';
   }
 
