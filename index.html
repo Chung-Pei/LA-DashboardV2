@@ -291,6 +291,16 @@ select option {
   min-width: 0;
   max-width: 100%;
 }
+/* 篩選條件 badge：防止文字撐破卡片邊界 */
+.time-slot-filter-badge > div,
+.pre-exam-filter-badge > div {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  white-space: normal;
+  flex-wrap: wrap;
+}
 .chart-title {
   font-size: 11px;
   font-weight: 700;
@@ -2250,13 +2260,14 @@ const CHART_INFO = {
   },
   preExamChart: {
     title: '平時及考前學習強度',
-    desc: '依期中、期末兩段考試期間的平時累積與考前 7 天占比，分析學生的準備模式。',
+    desc: '核心指標：T_total（統計期間總閱讀時數）、T_pre（考前 7 天累計時數）、P_pre = T_pre ÷ T_total × 100%。依 MECE 優先順序判定分型。',
     points: [
-      '平時占比大於 75% → 平時準備型',
-      '考前 1 週占比大於等於 35% → 高度衝刺型',
-      '考前 1 週占比 10% 至小於 35% → 適度備考型',
+      '① 學習低投入型：T_total < P15 門檻（全體最低 15%），總量不足，不分析節奏',
+      '② 高度衝刺型：P_pre ≥ 30%，集中學習（Massed Practice）',
+      '③ 規律分散型：10% ≤ P_pre < 30%，分散學習（Distributed Practice）',
+      '④ 提早完成型：P_pre < 10%，前置規劃（Pre-planning）',
     ],
-    use: '識別備考模式與成效的關係，引導學生調整學習計畫。',
+    use: '識別備考節律與成效的關係，引導學生調整為更有效的分散學習策略。',
   },
   timeSlotChart: {
     title: '學習時段分布',
