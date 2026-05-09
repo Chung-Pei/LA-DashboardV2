@@ -388,7 +388,15 @@ body.chart-expanded-open { overflow: hidden; }
 }
 @media (max-width: 900px) {
   .behavior-time-grid { grid-template-columns: 1fr; }
-  .behavior-radar-wrap { height: 460px; }
+  .behavior-radar-wrap { height: 360px; }
+}
+@media (max-width: 600px) {
+  .behavior-radar-wrap { height: 300px; }
+  /* 雷達圖頁面：縮緊卡片 padding 和標題 margin，減少上下留白 */
+  #sub-radar .chart-card { padding: 10px; }
+  #sub-radar .chart-title { margin-bottom: 8px; font-size: 10px; }
+  #radarControls { margin-bottom: 5px !important; }
+  #clusterSummaryCards { margin-bottom: 5px !important; }
 }
 
 /* ── SLOPE CHART ── */
@@ -1553,7 +1561,7 @@ body.light .subject-input {
         <!-- 控制列（篩選器）在上 -->
         <div id="radarControls" style="margin-bottom:8px"></div>
         <!-- 分群人數卡片在下（連動篩選器） -->
-        <div id="clusterSummaryCards" style="margin-bottom:12px"></div>
+        <div id="clusterSummaryCards" style="margin-bottom:8px"></div>
         <!-- 雷達圖 -->
         <div class="chart-card" style="margin-bottom:14px">
           <div class="chart-title" style="--accent-color:var(--accent)">
@@ -2375,7 +2383,10 @@ function attachInfoButtons() {
       const wrap = document.getElementById(id);
       if (wrap) titleEl = wrap.closest('.chart-card')?.querySelector('.chart-title');
     }
-    if (!titleEl || titleEl.querySelector('.chart-info-btn')) return;
+    if (!titleEl) return;
+    // 移除舊版按鈕與 popover，確保內容隨 CHART_INFO 更新
+    titleEl.querySelector('.chart-info-btn')?.remove();
+    titleEl.querySelector('.chart-popover')?.remove();
 
     // 建立按鈕
     const btn = document.createElement('button');
