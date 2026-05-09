@@ -146,16 +146,16 @@ const BehaviorTimeTab = (() => {
       `<option value="fail"${_filterPass === "fail" ? " selected" : ""}>不及格</option>`,
     ].join("");
     el.innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#f8f9fa)">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)">
         <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">年度
-          <select id="timeSemFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer">${semOptions}</select>
+          <select id="timeSemFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${semOptions}</select>
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">分群
-          <select id="timeClusterFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer">${clusterOptions}</select>
+          <select id="timeClusterFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${clusterOptions}</select>
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">及格/不及格
-          <select id="timePassFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer">${passOptions}</select>
+          <select id="timePassFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${passOptions}</select>
         </label>
         <span id="timeFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>
       </div>`;
@@ -540,7 +540,7 @@ const BehaviorTimeTab = (() => {
       ["期末 學習低投入型",  `${finalLow}  人（${(finalLow  / total * 100).toFixed(1)}%）`],
       ["期末 高度衝刺型",    `${finalCram} 人（${(finalCram / total * 100).toFixed(1)}%）`],
     ].map(([label, value]) => `
-      <div style="border:1px solid rgba(110,130,165,.18);border-radius:8px;padding:7px 9px;background:var(--card-bg2,#f8f9fa)">
+      <div style="border:1px solid rgba(110,130,165,.18);border-radius:8px;padding:7px 9px;background:var(--card-bg2,#1c2030)">
         <div style="font-size:.72rem;color:var(--text-dim,#888);line-height:1.2">${label}</div>
         <div style="font-weight:700;color:var(--text-mid,#4f5f78);margin-top:3px">${value}</div>
       </div>`).join("");
@@ -549,7 +549,7 @@ const BehaviorTimeTab = (() => {
     const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
     const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
     const filterBadge  =
-      `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
+      `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
       `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
       `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
       `<span style="margin-right:8px">📅 ${semLabel}</span>` +
@@ -560,7 +560,7 @@ const BehaviorTimeTab = (() => {
     el.innerHTML =
       filterBadge +
       `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px">${cardHtml}</div>` +
-      '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--card-bg2,#f0f4f8);font-size:.76rem;color:var(--text-dim,#666);line-height:1.6">' +
+      '<div style="margin-top:8px;padding:8px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);font-size:.76rem;color:var(--text-dim,#666);line-height:1.6">' +
         '<b>平時及考前學習強度分型定義（規格書 V2.1）：</b><br>' +
         '核心指標：<b>T<sub>total</sub></b>（統計期間總閱讀時數）、<b>T<sub>pre</sub></b>（考前7天累計時數）、' +
         '<b>P<sub>pre</sub></b> = T<sub>pre</sub> ÷ T<sub>total</sub> × 100%。<br>' +
@@ -598,7 +598,7 @@ const BehaviorTimeTab = (() => {
       const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
       const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
       badgeEl.innerHTML =
-        `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
+        `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
         `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
         `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
         `<span style="margin-right:8px">📅 ${semLabel}</span>` +

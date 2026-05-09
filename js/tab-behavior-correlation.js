@@ -355,13 +355,13 @@ const BehaviorCorrelationTab = (() => {
 
     const bar = document.createElement("div");
     bar.id = "corrFilterBar";
-    bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#f8f9fa)";
+    bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)";
     bar.innerHTML = `
       <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
       <div style="display:flex;align-items:center;gap:5px">
         <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">年度</label>
         <select id="corrSemFilter"
-                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer"
+                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
                 onchange="BehaviorCorrelationTab.onFilterChange()">
           ${semOptions}
         </select>
@@ -369,7 +369,7 @@ const BehaviorCorrelationTab = (() => {
       <div style="display:flex;align-items:center;gap:5px">
         <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">分群</label>
         <select id="corrClusterFilter"
-                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer"
+                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
                 onchange="BehaviorCorrelationTab.onFilterChange()">
           ${clusterOptions}
         </select>
@@ -491,7 +491,7 @@ const BehaviorCorrelationTab = (() => {
         const r = _pearson(feat, g);
         if (r == null) return `<td class="text-center text-muted small">—</td>`;
         const bg        = _rToColor(r);
-        const textColor = Math.abs(r) > 0.55 ? "#fff" : "#333";
+        const textColor = Math.abs(r) > 0.55 ? "#fff" : "var(--text,#dde3f5)";
         return `<td class="text-center small" style="background:${bg};color:${textColor};cursor:pointer"
                     onclick="BehaviorCorrelationTab.showScatter('${feat}','${g}')"
                     title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: ${corrSym}=${r}">
@@ -520,7 +520,7 @@ const BehaviorCorrelationTab = (() => {
         點擊儲存格可查看散佈圖（${isSpearman ? "Spearman ρ" : "Pearson r"}）。色彩：
         <span style="background:${_rToColor(0.6)};color:#fff;padding:1px 6px;border-radius:3px">強正相關</span>
         <span style="background:${_rToColor(-0.6)};color:#fff;padding:1px 6px;border-radius:3px;margin-left:4px">強負相關</span>
-        <span style="background:${_rToColor(0)};color:#333;padding:1px 6px;border-radius:3px;margin-left:4px">無相關</span>
+        <span style="background:${_rToColor(0)};color:var(--text,#dde3f5);padding:1px 6px;border-radius:3px;margin-left:4px">無相關</span>
       </p>`;
   }
 
@@ -549,7 +549,7 @@ const BehaviorCorrelationTab = (() => {
         : (_filterSemester !== "all")
           ? `年度 ${_filterSemester} 尚無獨立散佈圖資料（ETL 尚未產出 by_semester）`
           : "散佈圖資料尚未產出，請執行 ETL";
-      el.innerHTML = `<div style="padding:14px;background:rgba(230,126,34,.08);border:1px solid rgba(230,126,34,.3);border-radius:8px;font-size:.82rem;color:#a04000">⚠️ ${noDataReason}</div>`;
+      el.innerHTML = `<div style="padding:14px;background:rgba(230,126,34,.08);border:1px solid rgba(230,126,34,.3);border-radius:8px;font-size:.82rem;color:var(--accent3,#a04000)">⚠️ ${noDataReason}</div>`;
       return;
     }
 

@@ -108,7 +108,10 @@ const BehaviorRadarTab = (() => {
       _behaviorStudents=_enrichBehaviorStudents(behaviorData?.students||[]);_allStudents=_behaviorStudents;
       _allSemesters=Array.isArray(_behaviorMeta.semesters)&&_behaviorMeta.semesters.length?[..._behaviorMeta.semesters]:[];
       _selectedSemester="all";_selectedCluster="P0";_passFilter="all";_semesterFilterNote=null;
-      _renderBehaviorMetaStrip();_renderControls(controlsId);_renderRadar(canvasId);
+      _renderBehaviorMetaStrip();
+      _renderControls(controlsId);
+      renderClusterSummary("clusterSummaryCards");
+      _renderRadar(canvasId);
     }catch(err){BehaviorLoader.showError("tab-behavior",err.message);}
     finally{BehaviorLoader.setLoading("tab-behavior",false);}
   }
@@ -120,19 +123,26 @@ const BehaviorRadarTab = (() => {
       `<option value="all">全部年度（${_behaviorMeta.semester_range_label||_behaviorMeta.semester_range||"—"}）</option>`,
       ..._allSemesters.map(s=>`<option value="${s}"${s===_selectedSemester?" selected":""}>${_formatSemester(s)}</option>`),
     ].join("");
-    const noteHtml=_semesterFilterNote?`<div style="font-size:.76rem;color:#e67e22;margin-top:3px;margin-bottom:6px">${_semesterFilterNote}</div>`:"";const yearSel=_allSemesters.length?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px"><span style="font-size:.8rem;color:var(--text-dim,#888);white-space:nowrap">選擇年度：</span><select id="behaviorYearSelect" style="font-size:.82rem;padding:4px 8px;border-radius:8px;border:1px solid var(--border,#ddd);background:var(--surface2,#f8f9fa);color:var(--text-mid,#444);cursor:pointer" onchange="BehaviorRadarTab.onYearChange(this.value)">${semOpts}</select></div>${noteHtml}`:"";
+    const noteHtml=_semesterFilterNote?`<div style="font-size:.76rem;color:var(--accent3,#e67e22);margin-top:3px;margin-bottom:6px">${_semesterFilterNote}</div>`:"";const yearSel=_allSemesters.length?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px"><span style="font-size:.8rem;color:var(--text-dim,#888);white-space:nowrap">選擇年度：</span><select id="behaviorYearSelect" style="font-size:.82rem;padding:4px 8px;border-radius:8px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer" onchange="BehaviorRadarTab.onYearChange(this.value)">${semOpts}</select></div>${noteHtml}`:"";
     const clBtns=Object.entries(CLUSTER_NAMES).map(([k,n])=>`<button class="brt-cl${k===_selectedCluster?" brt-clA":""}" style="--cc:${CLUSTER_COLORS[k].border};--cb:${CLUSTER_COLORS[k].bg}" onclick="BehaviorRadarTab.selectCluster('${k}')"><span class="brt-code">${k}</span> ${n}</button>`).join("");
     const pfBtns=[{key:"all",lbl:"全體"},{key:"pass",lbl:"✅ 及格"},{key:"fail",lbl:"❌ 不及格"}].map(({key,lbl})=>`<button class="brt-pf${key===_passFilter?" brt-pfA":""}" onclick="BehaviorRadarTab.selectPassFilter('${key}')">${lbl}</button>`).join("");
-    el.innerHTML=`<style>
-      #${containerId} .brt-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
-      #${containerId} .brt-lbl{font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap;min-width:72px}
-      #${containerId} .brt-cl{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1.5px solid var(--cc);background:transparent;color:var(--cc);font-size:.78rem;cursor:pointer;transition:background .15s;font-family:inherit}
-      #${containerId} .brt-clA{background:var(--cb);font-weight:700}
-      #${containerId} .brt-code{font-weight:700;font-family:'JetBrains Mono','Courier New',monospace}
-      #${containerId} .brt-pf{padding:4px 12px;border-radius:20px;border:1.5px solid var(--accent,#3498db);background:transparent;color:var(--accent,#3498db);font-size:.78rem;cursor:pointer;transition:background .15s;font-family:inherit}
-      #${containerId} .brt-pfA{background:var(--accent,#3498db);color:#fff;font-weight:700}
-    </style>
-    <div style="display:flex;flex-direction:column;gap:2px">
+    // 防止 <style> 重複注入
+    const styleId = `brt-style-${containerId}`;
+    if (!document.getElementById(styleId)) {
+      const s = document.createElement('style');
+      s.id = styleId;
+      s.textContent = `
+        #${containerId} .brt-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+        #${containerId} .brt-lbl{font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap;min-width:72px}
+        #${containerId} .brt-cl{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;border:1.5px solid var(--cc);background:transparent;color:var(--cc);font-size:.78rem;cursor:pointer;transition:background .15s;font-family:inherit}
+        #${containerId} .brt-clA{background:var(--cb);font-weight:700}
+        #${containerId} .brt-code{font-weight:700;font-family:'JetBrains Mono','Courier New',monospace}
+        #${containerId} .brt-pf{padding:4px 12px;border-radius:20px;border:1.5px solid var(--accent,#3498db);background:transparent;color:var(--accent,#3498db);font-size:.78rem;cursor:pointer;transition:background .15s;font-family:inherit}
+        #${containerId} .brt-pfA{background:var(--accent,#3498db);color:#fff;font-weight:700}
+      `;
+      document.head.appendChild(s);
+    }
+    el.innerHTML=`<div style="display:flex;flex-direction:column;gap:2px">
       ${yearSel}
       <div class="brt-row"><span class="brt-lbl">依分群</span>${clBtns}</div>
       <div class="brt-row"><span class="brt-lbl">及格/不及格</span>${pfBtns}</div>
@@ -171,11 +181,23 @@ const BehaviorRadarTab = (() => {
       }
     }
     _renderBehaviorMetaStrip();_passFilter="all";
-    _renderControls("radarControls");_renderRadar("radarChart");
+    _renderControls("radarControls");
+    renderClusterSummary("clusterSummaryCards");
+    _renderRadar("radarChart");
   }
 
-  function selectCluster(key){_selectedCluster=key;_passFilter="all";_renderControls("radarControls");_renderRadar("radarChart");}
-  function selectPassFilter(key){_passFilter=key;_renderControls("radarControls");_renderRadar("radarChart");}
+  function selectCluster(key){
+    _selectedCluster=key;_passFilter="all";
+    _renderControls("radarControls");
+    renderClusterSummary("clusterSummaryCards");
+    _renderRadar("radarChart");
+  }
+  function selectPassFilter(key){
+    _passFilter=key;
+    _renderControls("radarControls");
+    renderClusterSummary("clusterSummaryCards");
+    _renderRadar("radarChart");
+  }
 
   function _computeFromStudents(clusterKey,passKey,dims){
     const students=_behaviorStudents;if(!students||!students.length)return null;
@@ -235,15 +257,66 @@ const BehaviorRadarTab = (() => {
     _radarChart=new Chart(canvas.getContext("2d"),{type:"radar",data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:0,max:1,ticks:{stepSize:0.2,callback:v=>`${Math.round(v*100)}%`,font:{size:10}},pointLabels:{font:{size:12}}}},plugins:{legend:{position:"bottom",align:"center",labels:{boxWidth:34,boxHeight:12,font:{size:13,weight:"600"},padding:16}},tooltip:{mode:"nearest",intersect:true,callbacks:{title:ctx=>ctx.length?`📊 ${ctx[0].label}`:"",label:ctx=>` ${ctx.dataset.label.split("（")[0]}：${(ctx.raw*100).toFixed(1)}%`,afterBody:ctx=>{if(!ctx.length)return[];const sorted=[...ctx].sort((a,b)=>b.raw-a.raw),dl=ctx[0].label;return[`🏆 ${dl} 排名：`,...sorted.map((c,i)=>`  ${RANK_MEDALS[i]??`${i+1}.`} ${c.dataset.label.split("（")[0]}：${(c.raw*100).toFixed(1)}%`)];},footer:ctx=>{if(!ctx.length)return[];const l=["👥 人數："];ctx.forEach(c=>{const m=c.dataset.label.match(/n=(\d+)/);if(m)l.push(`  ${c.dataset.label.split("（")[0]}：${m[1]} 人`);});return l;}}}}}});
   }
 
-  function renderClusterSummary(containerId){
-    if(!_radarData)return;const el=document.getElementById(containerId);if(!el)return;
-    const rows=_clusterRows(),total=_clusterTotal();
-    const totalCard=`<div class="behavior-cluster-card" style="flex:0 0 150px;min-width:150px;border:1px solid rgba(46,204,113,.28);border-radius:8px;background:rgba(46,204,113,.08);padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)"><div style="font-size:.78rem;color:var(--text-dim,#888)">總分析人數</div><div style="margin-top:4px;font-weight:800;color:#239b56;font-size:1.45rem;line-height:1">${total.toLocaleString()}</div><div style="margin-top:6px;font-size:.78rem;line-height:1.25;color:#4f5f78">100.0%</div></div>`;
-    const cards=Object.entries(CLUSTER_NAMES).filter(([k])=>k!=="P0").map(([key,name])=>{const n=rows[key]?.count||0,pct=total?(n/total)*100:0,col=CLUSTER_COLORS[key];return`<div class="behavior-cluster-card" style="flex:0 0 144px;min-width:144px;border:1px solid rgba(110,130,165,.22);border-radius:8px;background:#fff;padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><span style="font-weight:700;color:${col.border};font-size:.92rem">${key}</span><span style="font-weight:700;color:${col.border};font-size:1.45rem;line-height:1">${n}</span></div><div title="${name}" style="margin-top:6px;font-size:.82rem;line-height:1.25;color:#4f5f78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div><div style="margin-top:3px;font-size:.76rem;line-height:1.2;color:var(--text-dim,#888)">佔 ${pct.toFixed(1)}%</div></div>`;}).join("");
+  // 依目前篩選狀態計算某群人數（模組層級，避免每次 render 重建）
+  function _filteredCount(clusterKey) {
+    const students = _behaviorStudents;
+    if (!students || !students.length) {
+      if (clusterKey === "P0") return _clusterTotal();
+      return _clusterRows()[clusterKey]?.count || 0;
+    }
+    return students.filter(s => {
+      if (clusterKey !== "P0" && s.cluster !== clusterKey) return false;
+      if (_passFilter !== "all") {
+        const sc = s.final_score ?? s.semester_score ?? null;
+        const scNum = Number(sc);
+        const isPassing = Number.isFinite(scNum) && scNum >= 60;
+        if (_passFilter === "pass" && !isPassing) return false;
+        if (_passFilter === "fail" && isPassing) return false;
+      }
+      return true;
+    }).length;
+  }
+
+  function renderClusterSummary(containerId) {
+    if (!_radarData) return;
+    const el = document.getElementById(containerId); if (!el) return;
+    const total = _filteredCount("P0");
+    let filterDesc = "";
+    if (_selectedSemester !== "all") filterDesc += ` · ${_formatSemester(_selectedSemester)}`;
+    if (_passFilter === "pass") filterDesc += " · 及格";
+    if (_passFilter === "fail") filterDesc += " · 不及格";
+
+    const totalCard = `<div class="behavior-cluster-card" style="flex:0 0 150px;min-width:150px;border:1px solid rgba(46,204,113,.28);border-radius:8px;background:rgba(46,204,113,.08);padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)">
+      <div style="font-size:.78rem;color:var(--text-dim,#888)">分析人數${filterDesc}</div>
+      <div style="margin-top:4px;font-weight:800;color:var(--green,#239b56);font-size:1.45rem;line-height:1">${total.toLocaleString()}</div>
+      <div style="margin-top:6px;font-size:.78rem;line-height:1.25;color:var(--text-mid,#9aa0b8)">100.0%</div>
+    </div>`;
+
+    const cards=Object.entries(CLUSTER_NAMES).filter(([k])=>k!=="P0").map(([key,name])=>{
+      const n=_filteredCount(key);
+      const pct=total?(n/total)*100:0;
+      const col=CLUSTER_COLORS[key];
+      const isSelected=_selectedCluster===key;
+      const borderStyle=isSelected?`2px solid ${col.border}`:`1px solid rgba(110,130,165,.22)`;
+      const bgStyle=isSelected?col.bg:`var(--surface,#13161f)`;
+      return`<div class="behavior-cluster-card" style="flex:0 0 144px;min-width:144px;border:${borderStyle};border-radius:8px;background:${bgStyle};padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06);cursor:pointer" onclick="BehaviorRadarTab.selectCluster('${key}')">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+          <span style="font-weight:700;color:${col.border};font-size:.92rem">${key}</span>
+          <span style="font-weight:700;color:${col.border};font-size:1.45rem;line-height:1">${n}</span>
+        </div>
+        <div title="${name}" style="margin-top:6px;font-size:.82rem;line-height:1.25;color:var(--text-mid,#4f5f78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+        <div style="margin-top:3px;font-size:.76rem;line-height:1.2;color:var(--text-dim,#888)">佔 ${pct.toFixed(1)}%</div>
+      </div>`;
+    }).join("");
+
     el.innerHTML=`<div style="display:flex;flex-direction:row;gap:10px;align-items:stretch;overflow-x:auto;padding:4px 2px 8px">${totalCard}${cards}</div>`;
   }
 
-  function switchView(mode){_renderControls("radarControls");_renderRadar("radarChart");}
+  function switchView(mode) {
+    _renderControls("radarControls");
+    renderClusterSummary("clusterSummaryCards");
+    _renderRadar("radarChart");
+  }
   function toggleCluster(key){selectCluster(key);}
 
   return{init,switchView,toggleCluster,renderClusterSummary,onYearChange,selectCluster,selectPassFilter};
