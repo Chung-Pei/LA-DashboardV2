@@ -69,6 +69,9 @@
   --radius:    10px;
   --tab-h:     52px;
   --header-h:  58px;
+  /* 補充：dark mode 下 card 背景 */
+  --card-bg2:  #1c2030;
+  --card-bg:   #13161f;
 }
 
 /* ── 淺色模式 Light Mode ── */
@@ -91,6 +94,8 @@ body.light {
   --blue:      #2e5ec8;
   --gray:      #6b748f;
   --green:     #1e9e78;
+  --card-bg2:  #f0f2f8;
+  --card-bg:   #ffffff;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -290,16 +295,6 @@ select option {
   position: relative;
   min-width: 0;
   max-width: 100%;
-}
-/* 篩選條件 badge：防止文字撐破卡片邊界 */
-.time-slot-filter-badge > div,
-.pre-exam-filter-badge > div {
-  box-sizing: border-box;
-  max-width: 100%;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  white-space: normal;
-  flex-wrap: wrap;
 }
 .chart-title {
   font-size: 11px;
@@ -823,6 +818,14 @@ body.light #svgTooltip {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+/* ── Dark mode: loading overlay 不顯示白色 ── */
+.loading-overlay {
+  background: rgba(11,13,20,0.82) !important;
+}
+body.light .loading-overlay {
+  background: rgba(255,255,255,0.82) !important;
 }
 
 /* ── 說明 Popover ── */
@@ -1512,7 +1515,7 @@ body.light .subject-input {
     <div id="tab-behavior" class="position-relative">
       <div class="loading-overlay" id="behaviorLoadingOverlay"
            style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;
-                  z-index:10;background:rgba(255,255,255,0.8);
+                  z-index:10;background:rgba(var(--surface-rgb,19,22,31),0.85);
                   justify-content:center;align-items:center;min-height:200px">
         <div style="text-align:center;color:var(--text-dim,#888)">
           <div style="font-size:1.5rem;margin-bottom:8px">⏳</div>
@@ -1547,10 +1550,10 @@ body.light .subject-input {
 
       <!-- ─── 子面板 A：雷達圖 ─── -->
       <div id="sub-radar" class="behavior-sub-pane">
-        <!-- 分群人數卡片 -->
-        <div id="clusterSummaryCards" style="margin-bottom:12px"></div>
-        <!-- 控制列 -->
+        <!-- 控制列（篩選器）在上 -->
         <div id="radarControls" style="margin-bottom:8px"></div>
+        <!-- 分群人數卡片在下（連動篩選器） -->
+        <div id="clusterSummaryCards" style="margin-bottom:12px"></div>
         <!-- 雷達圖 -->
         <div class="chart-card" style="margin-bottom:14px">
           <div class="chart-title" style="--accent-color:var(--accent)">
@@ -2260,14 +2263,13 @@ const CHART_INFO = {
   },
   preExamChart: {
     title: '平時及考前學習強度',
-    desc: '核心指標：T_total（統計期間總閱讀時數）、T_pre（考前 7 天累計時數）、P_pre = T_pre ÷ T_total × 100%。依 MECE 優先順序判定分型。',
+    desc: '依期中、期末兩段考試期間的平時累積與考前 7 天占比，分析學生的準備模式。',
     points: [
-      '① 學習低投入型：T_total < P15 門檻（全體最低 15%），總量不足，不分析節奏',
-      '② 高度衝刺型：P_pre ≥ 30%，集中學習（Massed Practice）',
-      '③ 規律分散型：10% ≤ P_pre < 30%，分散學習（Distributed Practice）',
-      '④ 提早完成型：P_pre < 10%，前置規劃（Pre-planning）',
+      '平時占比大於 75% → 平時準備型',
+      '考前 1 週占比大於等於 35% → 高度衝刺型',
+      '考前 1 週占比 10% 至小於 35% → 適度備考型',
     ],
-    use: '識別備考節律與成效的關係，引導學生調整為更有效的分散學習策略。',
+    use: '識別備考模式與成效的關係，引導學生調整學習計畫。',
   },
   timeSlotChart: {
     title: '學習時段分布',
