@@ -2270,14 +2270,15 @@ const CHART_INFO = {
     use: '量化學習節律，作為課程設計（作業分散化）的參考依據。',
   },
   preExamChart: {
-    title: '平時及考前學習強度',
-    desc: '依期中、期末兩段考試期間的平時累積與考前 7 天占比，分析學生的準備模式。',
+    title: '平時及考前學習強度分型（V2.1）',
+    desc: '核心指標：T<sub>total</sub>（期間總閱讀時數）、P<sub>pre</sub> = T<sub>pre</sub> ÷ T<sub>total</sub> × 100%（考前 7 天占比）。P15 門檻：期中 781 分鐘、期末 855 分鐘。',
     points: [
-      '平時占比大於 75% → 平時準備型',
-      '考前 1 週占比大於等於 35% → 高度衝刺型',
-      '考前 1 週占比 10% 至小於 35% → 適度備考型',
+      '① 學習低投入型：T<sub>total</sub> &lt; P15 門檻，學習量不足，不分析節奏',
+      '② 高度衝刺型：P<sub>pre</sub> ≥ 30%（集中學習 Massed Practice）',
+      '③ 規律分散型：10% ≤ P<sub>pre</sub> &lt; 30%（分散學習 Distributed Practice）',
+      '④ 提早完成型：P<sub>pre</sub> &lt; 10%（前置規劃 Pre-planning）',
     ],
-    use: '識別備考模式與成效的關係，引導學生調整學習計畫。',
+    use: '識別備考模式與成效的關係，引導學生調整學習策略。外圈 = 期末考；內圈 = 期中考。',
   },
   timeSlotChart: {
     title: '學習時段分布',
