@@ -95,13 +95,20 @@ const BehaviorTimeTab = (() => {
   }
 
   function _availableSemesters() {
+    // 僅取 lms_etl.py 產出的學習行為年度，不混入 etl.py / data.json 的成績年度
     const fromMeta = [
       ...(_behaviorData?.meta?.semesters || []),
-      ...(_timeData?.meta?.semesters || []),
-      ...(_quizData?.meta?.semesters || []),
+      ...(_timeData?.meta?.semesters    || []),
+      ...(_quizData?.meta?.semesters    || []),
     ];
-    const fromRows = _studentRows(false).map(r => r.semester).filter(Boolean);
-    return [...new Set([...fromMeta, ...fromRows])].sort();
+    // 直接從 lms_etl.py 的 students 陣列取 semester，避免走 _studentRows()（會 merge 成績年度）
+    const lmsSrc = [
+      ...(_behaviorData?.students || []),
+      ...(_timeData?.students     || []),
+      ...(_quizData?.students     || []),
+    ];
+    const fromLmsRows = lmsSrc.map(s => s.semester).filter(Boolean);
+    return [...new Set([...fromMeta, ...fromLmsRows])].sort();
   }
 
   async function init() {
@@ -542,7 +549,7 @@ const BehaviorTimeTab = (() => {
     const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
     const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
     const filterBadge  =
-      `<div style="margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
+      `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
       `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
       `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
       `<span style="margin-right:8px">📅 ${semLabel}</span>` +
@@ -591,7 +598,7 @@ const BehaviorTimeTab = (() => {
       const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
       const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
       badgeEl.innerHTML =
-        `<div style="margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
+        `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#eef2f7);` +
         `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
         `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
         `<span style="margin-right:8px">📅 ${semLabel}</span>` +
