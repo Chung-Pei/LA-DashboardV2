@@ -254,7 +254,21 @@ const BehaviorRadarTab = (() => {
     const canvas=document.getElementById(canvasId);if(!canvas)return;
     canvas.style.display="";canvas.parentElement?.querySelector(".behavior-empty-message")?.remove();
     if(_radarChart){_radarChart.destroy();_radarChart=null;}
-    _radarChart=new Chart(canvas.getContext("2d"),{type:"radar",data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:0,max:1,ticks:{stepSize:0.2,callback:v=>`${Math.round(v*100)}%`,font:{size:10}},pointLabels:{font:{size:12}}}},plugins:{legend:{position:"bottom",align:"center",labels:{boxWidth:34,boxHeight:12,font:{size:13,weight:"600"},padding:16}},tooltip:{mode:"nearest",intersect:true,callbacks:{title:ctx=>ctx.length?`📊 ${ctx[0].label}`:"",label:ctx=>` ${ctx.dataset.label.split("（")[0]}：${(ctx.raw*100).toFixed(1)}%`,afterBody:ctx=>{if(!ctx.length)return[];const sorted=[...ctx].sort((a,b)=>b.raw-a.raw),dl=ctx[0].label;return[`🏆 ${dl} 排名：`,...sorted.map((c,i)=>`  ${RANK_MEDALS[i]??`${i+1}.`} ${c.dataset.label.split("（")[0]}：${(c.raw*100).toFixed(1)}%`)];},footer:ctx=>{if(!ctx.length)return[];const l=["👥 人數："];ctx.forEach(c=>{const m=c.dataset.label.match(/n=(\d+)/);if(m)l.push(`  ${c.dataset.label.split("（")[0]}：${m[1]} 人`);});return l;}}}}}});
+    // 讀取目前是否為深色模式，動態決定線條顏色
+    const _isDark=()=>document.documentElement.classList.contains('dark')||window.matchMedia('(prefers-color-scheme:dark)').matches;
+    const _gridColor=_isDark()?'rgba(180,185,210,0.20)':'rgba(0,0,0,0.08)';
+    const _angleColor=_isDark()?'rgba(180,185,210,0.30)':'rgba(0,0,0,0.15)';
+    const _labelColor=_isDark()?'rgba(190,195,220,0.85)':'rgba(60,65,90,0.85)';
+    const _tickColor=_isDark()?'rgba(160,165,195,0.70)':'rgba(80,85,110,0.70)';
+    // 手機版縮小 legend 與 layout padding，避免上下留白過多
+    const _isMobile=window.innerWidth<600;
+    const _legendPad=_isMobile?6:16;
+    const _legendBox=_isMobile?20:34;
+    const _legendFontSz=_isMobile?11:13;
+    const _layoutPad=_isMobile?{top:4,right:8,bottom:4,left:8}:6;
+    const _pointLblFontSz=_isMobile?10:12;
+    const _tickFontSz=_isMobile?9:10;
+    _radarChart=new Chart(canvas.getContext("2d"),{type:"radar",data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,layout:{padding:_layoutPad},scales:{r:{min:0,max:1,grid:{color:_gridColor},angleLines:{color:_angleColor},pointLabels:{color:_labelColor,font:{size:_pointLblFontSz}},ticks:{stepSize:0.2,color:_tickColor,backdropColor:'transparent',callback:v=>`${Math.round(v*100)}%`,font:{size:_tickFontSz}}}},plugins:{legend:{position:"bottom",align:"center",labels:{boxWidth:_legendBox,boxHeight:_isMobile?10:12,font:{size:_legendFontSz,weight:"600"},padding:_legendPad}},tooltip:{mode:"nearest",intersect:true,callbacks:{title:ctx=>ctx.length?`📊 ${ctx[0].label}`:"",label:ctx=>` ${ctx.dataset.label.split("（")[0]}：${(ctx.raw*100).toFixed(1)}%`,afterBody:ctx=>{if(!ctx.length)return[];const sorted=[...ctx].sort((a,b)=>b.raw-a.raw),dl=ctx[0].label;return[`🏆 ${dl} 排名：`,...sorted.map((c,i)=>`  ${RANK_MEDALS[i]??`${i+1}.`} ${c.dataset.label.split("（")[0]}：${(c.raw*100).toFixed(1)}%`)];},footer:ctx=>{if(!ctx.length)return[];const l=["👥 人數："];ctx.forEach(c=>{const m=c.dataset.label.match(/n=(\d+)/);if(m)l.push(`  ${c.dataset.label.split("（")[0]}：${m[1]} 人`);});return l;}}}}}});
   }
 
   // 依目前篩選狀態計算某群人數（模組層級，避免每次 render 重建）
@@ -286,10 +300,21 @@ const BehaviorRadarTab = (() => {
     if (_passFilter === "pass") filterDesc += " · 及格";
     if (_passFilter === "fail") filterDesc += " · 不及格";
 
-    const totalCard = `<div class="behavior-cluster-card" style="flex:0 0 150px;min-width:150px;border:1px solid rgba(46,204,113,.28);border-radius:8px;background:rgba(46,204,113,.08);padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06)">
-      <div style="font-size:.78rem;color:var(--text-dim,#888)">分析人數${filterDesc}</div>
-      <div style="margin-top:4px;font-weight:800;color:var(--green,#239b56);font-size:1.45rem;line-height:1">${total.toLocaleString()}</div>
-      <div style="margin-top:6px;font-size:.78rem;line-height:1.25;color:var(--text-mid,#9aa0b8)">100.0%</div>
+    // 手機版縮小卡片
+    const isMobile = window.innerWidth < 600;
+    const cardW  = isMobile ? "110px" : "150px";
+    const cardW2 = isMobile ? "104px" : "144px";
+    const pad    = isMobile ? "7px 9px" : "10px 12px";
+    const numSz  = isMobile ? "1.15rem" : "1.45rem";
+    const lblSz  = isMobile ? ".72rem"  : ".78rem";
+    const nameSz = isMobile ? ".76rem"  : ".82rem";
+    const pcSz   = isMobile ? ".70rem"  : ".76rem";
+    const keySz  = isMobile ? ".84rem"  : ".92rem";
+
+    const totalCard = `<div class="behavior-cluster-card" style="flex:0 0 ${cardW};min-width:${cardW};border:1px solid rgba(46,204,113,.28);border-radius:8px;background:rgba(46,204,113,.08);padding:${pad};box-shadow:0 2px 8px rgba(20,35,60,.06)">
+      <div style="font-size:${lblSz};color:var(--text-dim,#888)">分析人數${filterDesc}</div>
+      <div style="margin-top:4px;font-weight:800;color:var(--green,#239b56);font-size:${numSz};line-height:1">${total.toLocaleString()}</div>
+      <div style="margin-top:6px;font-size:${lblSz};line-height:1.25;color:var(--text-mid,#9aa0b8)">100.0%</div>
     </div>`;
 
     const cards=Object.entries(CLUSTER_NAMES).filter(([k])=>k!=="P0").map(([key,name])=>{
@@ -299,17 +324,17 @@ const BehaviorRadarTab = (() => {
       const isSelected=_selectedCluster===key;
       const borderStyle=isSelected?`2px solid ${col.border}`:`1px solid rgba(110,130,165,.22)`;
       const bgStyle=isSelected?col.bg:`var(--surface,#13161f)`;
-      return`<div class="behavior-cluster-card" style="flex:0 0 144px;min-width:144px;border:${borderStyle};border-radius:8px;background:${bgStyle};padding:10px 12px;box-shadow:0 2px 8px rgba(20,35,60,.06);cursor:pointer" onclick="BehaviorRadarTab.selectCluster('${key}')">
+      return`<div class="behavior-cluster-card" style="flex:0 0 ${cardW2};min-width:${cardW2};border:${borderStyle};border-radius:8px;background:${bgStyle};padding:${pad};box-shadow:0 2px 8px rgba(20,35,60,.06);cursor:pointer" onclick="BehaviorRadarTab.selectCluster('${key}')">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
-          <span style="font-weight:700;color:${col.border};font-size:.92rem">${key}</span>
-          <span style="font-weight:700;color:${col.border};font-size:1.45rem;line-height:1">${n}</span>
+          <span style="font-weight:700;color:${col.border};font-size:${keySz}">${key}</span>
+          <span style="font-weight:700;color:${col.border};font-size:${numSz};line-height:1">${n}</span>
         </div>
-        <div title="${name}" style="margin-top:6px;font-size:.82rem;line-height:1.25;color:var(--text-mid,#4f5f78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
-        <div style="margin-top:3px;font-size:.76rem;line-height:1.2;color:var(--text-dim,#888)">佔 ${pct.toFixed(1)}%</div>
+        <div title="${name}" style="margin-top:6px;font-size:${nameSz};line-height:1.25;color:var(--text-mid,#4f5f78);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+        <div style="margin-top:3px;font-size:${pcSz};line-height:1.2;color:var(--text-dim,#888)">佔 ${pct.toFixed(1)}%</div>
       </div>`;
     }).join("");
 
-    el.innerHTML=`<div style="display:flex;flex-direction:row;gap:10px;align-items:stretch;overflow-x:auto;padding:4px 2px 8px">${totalCard}${cards}</div>`;
+    el.innerHTML=`<div style="display:flex;flex-direction:row;gap:${isMobile?'6px':'10px'};align-items:stretch;overflow-x:auto;padding:4px 2px 8px">${totalCard}${cards}</div>`;
   }
 
   function switchView(mode) {
