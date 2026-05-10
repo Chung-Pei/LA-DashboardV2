@@ -1631,21 +1631,49 @@ body.light .subject-input {
         </div>
       </div><!-- /sub-correlation -->
 
-      <!-- ─── 子面板 C：時間分析 ─── -->
+      <!-- ─── 子面板 C：時間分析 (v2.1) ─── -->
       <div id="sub-time" class="behavior-sub-pane" style="display:none">
+
+        <!-- 篩選器列（由 tab-behavior-time.js 動態注入） -->
         <div id="tab-time"></div>
+
+        <!-- ① AI 智慧洞察文字框 (新增) -->
+        <div id="aiInsightBadge"></div>
+
+        <!-- ② 各週題庫作答強度（原有，保留） -->
         <div class="chart-card" style="margin-bottom:14px">
           <div class="chart-title" style="--accent-color:var(--accent)">
             <span class="dot"></span>各週題庫作答強度
+            <button class="chart-info-btn" data-info="weeklyQuiz">ℹ</button>
+            <div class="chart-popover" id="info-weeklyQuiz">
+              <div class="chart-popover-title">各週題庫作答強度
+                <button class="chart-popover-close" onclick="this.closest('.chart-popover').classList.remove('open')">×</button>
+              </div>
+              X 軸為第 1–18 週，Y 軸左側為平均作答次數與作答人數，右側為題庫及格率。
+              紅色垂直線標示期中（W9）及期末（W18）考週，用於觀察考前是否有學習高峰。
+            </div>
           </div>
           <div class="chart-wrap" style="height:240px;position:relative">
             <canvas id="weeklyQuizChart"></canvas>
           </div>
         </div>
+
+        <!-- ③ 平時及考前學習強度 ＋ 學習時段分布（原有，保留） -->
         <div class="behavior-time-grid">
           <div class="chart-card">
             <div class="chart-title" style="--accent-color:var(--accent3)">
               <span class="dot"></span>平時及考前學習強度
+              <button class="chart-info-btn" data-info="preExam">ℹ</button>
+              <div class="chart-popover" id="info-preExam">
+                <div class="chart-popover-title">平時及考前學習強度
+                  <button class="chart-popover-close" onclick="this.closest('.chart-popover').classList.remove('open')">×</button>
+                </div>
+                依學習行為將學生分為四型：<br>
+                <span class="popover-tag" style="background:rgba(158,158,158,.25)">低投入</span>總學習量偏低<br>
+                <span class="popover-tag" style="background:rgba(255,82,82,.25)">高度衝刺</span>考前7天佔30%以上<br>
+                <span class="popover-tag" style="background:rgba(76,175,80,.25)">規律分散</span>考前比例10–30%<br>
+                <span class="popover-tag" style="background:rgba(33,150,243,.25)">提早完成</span>考前比例低於10%
+              </div>
             </div>
             <div class="chart-wrap" style="height:300px;position:relative">
               <canvas id="preExamChart"></canvas>
@@ -1654,12 +1682,66 @@ body.light .subject-input {
           <div class="chart-card">
             <div class="chart-title" style="--accent-color:var(--accent4)">
               <span class="dot"></span>學習時段分布
+              <button class="chart-info-btn" data-info="timeSlot">ℹ</button>
+              <div class="chart-popover" id="info-timeSlot">
+                <div class="chart-popover-title">學習時段分布
+                  <button class="chart-popover-close" onclick="this.closest('.chart-popover').classList.remove('open')">×</button>
+                </div>
+                將全日分為四時段，顯示學生的平均學習時間分布比例。<br>
+                深夜（23:00–06:00）比例偏高時，AI 洞察框會自動提示。
+              </div>
             </div>
             <div class="chart-wrap behavior-time-slot-wrap">
               <canvas id="timeSlotChart"></canvas>
             </div>
           </div>
         </div>
+
+        <!-- ④ 學習規律熱力圖（新增） -->
+        <div class="chart-card" style="margin-top:14px">
+          <div class="chart-title" style="--accent-color:var(--accent2)">
+            <span class="dot"></span>學習規律熱力圖
+            <span style="color:var(--text-dim);font-size:9px;margin-left:6px">— X 軸：0–23 時；Y 軸：週一至週日</span>
+            <button class="chart-info-btn" data-info="studyHeatmap">ℹ</button>
+            <button class="chart-expand-btn" data-target="studyHeatmapWrap">⤢</button>
+            <div class="chart-popover" id="info-studyHeatmap">
+              <div class="chart-popover-title">學習規律熱力圖
+                <button class="chart-popover-close" onclick="this.closest('.chart-popover').classList.remove('open')">×</button>
+              </div>
+              顯示一週七天 × 24 小時的學習密集度分布。顏色越深橙代表該時段累計學習分鐘數越高。
+              可協助識別學生是否有規律的學習節奏（Spaced Practice），或集中於特定時段（Massed Practice）。
+              <br><br>學術依據：Knight et al. (2017), Tabuenca et al. (2015)
+            </div>
+          </div>
+          <div id="studyHeatmapWrap" style="padding:6px 0;min-height:180px"></div>
+        </div>
+
+        <!-- ⑤ 24小時學習趨勢折線圖（新增） -->
+        <div class="chart-card" style="margin-top:14px;margin-bottom:14px">
+          <div class="chart-title" style="--accent-color:var(--accent3)">
+            <span class="dot"></span>24 小時學習活躍度趨勢
+            <span style="color:var(--text-dim);font-size:9px;margin-left:6px">— 含分群對比疊加</span>
+            <button class="chart-info-btn" data-info="hourlyLine">ℹ</button>
+            <button class="chart-expand-btn" data-target="hourlyLineWrap">⤢</button>
+            <div class="chart-popover" id="info-hourlyLine">
+              <div class="chart-popover-title">24 小時學習活躍度趨勢
+                <button class="chart-popover-close" onclick="this.closest('.chart-popover').classList.remove('open')">×</button>
+              </div>
+              X 軸為一天 24 小時，Y 軸為正規化學習活躍度（各組加總後歸一化，方便跨組比較）。<br><br>
+              <b>線條說明：</b><br>
+              <span class="popover-tag" style="background:rgba(52,152,219,.25)">藍色實線</span>全班平均<br>
+              <span class="popover-tag" style="background:rgba(46,204,113,.25)">綠色虛線</span>前 25% 高分群<br>
+              <span class="popover-tag" style="background:rgba(241,196,15,.25)">黃色點線</span>及格群<br>
+              <span class="popover-tag" style="background:rgba(231,76,60,.25)">紅色點線</span>不及格群<br><br>
+              篩選器啟用時，分群疊加線暫不顯示（避免邏輯衝突）。<br>
+              學術依據：Knight et al. (2017)
+            </div>
+          </div>
+          <div id="hourlyLineWrap" class="chart-wrap" style="height:260px;position:relative">
+            <canvas id="hourlyLineChart"></canvas>
+          </div>
+        </div>
+
       </div><!-- /sub-time -->
 
     </div><!-- /#tab-behavior -->
@@ -4557,6 +4639,8 @@ const PRINT_ITEMS = [
   { id: 'weeklyQuizChart',       label: '各週題庫作答強度',         tab: 'L', type: 'canvas', checked: false },
   { id: 'preExamChart',          label: '平時及考前學習強度',       tab: 'L', type: 'canvas', checked: false },
   { id: 'timeSlotChart',         label: '學習時段分布',             tab: 'L', type: 'canvas', checked: false },
+  { id: 'studyHeatmapWrap',     label: '學習規律熱力圖',           tab: 'L', type: 'div',    checked: false },
+  { id: 'hourlyLineWrap',       label: '24小時學習活躍度趨勢',     tab: 'L', type: 'div',    checked: false },
 ];
 
 const PRINT_TAB_LABELS = { D: '整屆', A: '班級', C: '個案', B: '重修', L: '學習行為' };
