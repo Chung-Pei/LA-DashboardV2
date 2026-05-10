@@ -577,6 +577,37 @@ body.chart-expanded-open { overflow: hidden; }
 }
 .mode-btn.active { background: var(--accent); color: #fff; }
 
+/* ── Segmented Control (Panel C 族群切換) ── */
+.view-controls-seg {
+  display: flex;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+.seg-btn {
+  background: transparent;
+  border: none;
+  padding: 6px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: 'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.seg-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
+/* ── Panel C collapse when profile is showing ── */
+#profileWrap:not(:empty) + #cStats { margin-top: 10px; }
+.c-view-panel { transition: opacity 0.25s ease; }
+
 /* ── RESPONSIVE ── */
 @media (max-width: 700px) {
   :root { --header-h: 100px; }
@@ -1136,12 +1167,8 @@ body.light .subject-input {
     <span class="tab-label">Class Overview</span>
   </button>
   <button class="tab" onclick="switchTab('C')">
-    <span>個案追蹤</span>
-    <span class="tab-label">Individual Profile</span>
-  </button>
-  <button class="tab" onclick="switchTab('B')">
-    <span>重修分析</span>
-    <span class="tab-label">Retaker Analysis</span>
+    <span>學生表現</span>
+    <span class="tab-label">Performance & Retaker</span>
   </button>
   <button class="tab" onclick="switchTab('L')">
     <span>📊 學習行為</span>
@@ -1243,142 +1270,187 @@ body.light .subject-input {
   </div>
 </div>
 
-<!-- ══ PANEL B ══ -->
-<div class="panel" id="panelB">
-  <div class="filter-bar">
-    <span class="filter-label">類型 Type</span>
-    <select id="bFilterType" onchange="renderB()">
-      <option value="theory">正課 Theory</option>
-      <option value="practicum">實驗 Practicum</option>
-    </select>
-    <div class="filter-sep"></div>
-    <span class="filter-label">顯示模式 Mode</span>
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="modeBySheet" onclick="setBMode('sheet')">依班級名稱</button>
-      <button class="mode-btn" id="modeByStudent" onclick="setBMode('student')">同學號全紀錄</button>
-    </div>
-  </div>
-
-  <div class="stat-row" id="bStats"></div>
-
-  <div class="chart-grid chart-grid-2">
-    <div class="chart-card">
-      <div class="chart-title" style="--accent-color:var(--accent4)">
-        <div class="dot"></div>首修 → 重修 進退步 Slope Chart
-      </div>
-      <div class="slope-wrap">
-        <svg id="slopeChart" class="slope-svg" height="280"></svg>
-      </div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title" style="--accent-color:var(--accent3)">
-        <div class="dot"></div>Δ 分佈 Delta Distribution
-      </div>
-      <div class="chart-wrap" style="height:240px">
-        <canvas id="chartDelta"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <div class="chart-card" id="quadrantCard" style="display:none">
-    <div class="chart-title" style="--accent-color:var(--accent2)">
-      <div class="dot"></div>正課 × 實驗 四象限 Cross-Domain Quadrant
-      <span style="color:var(--text-dim);font-size:9px;margin-left:6px">⚠ 此圖同時比較正課與實驗課，不受上方課程篩選影響</span>
-    </div>
-    <div class="chart-wrap" style="height:260px">
-      <canvas id="chartQuadrant"></canvas>
-    </div>
-    <div class="quadrant-labels">
-      <div class="q-label">
-        <div class="q-name" style="color:var(--accent2)">Q1 右上：雙強</div>
-        <div class="q-desc">正課強 · 實驗強 → 無需介入</div>
-      </div>
-      <div class="q-label">
-        <div class="q-name" style="color:var(--accent3)">Q2 左上：實作強</div>
-        <div class="q-desc">正課弱 · 實驗強 → 加強流病報告邏輯</div>
-      </div>
-      <div class="q-label">
-        <div class="q-name" style="color:var(--accent3)">Q4 右下：學理強</div>
-        <div class="q-desc">正課強 · 實驗弱 → 補充致病機轉概念</div>
-      </div>
-      <div class="q-label">
-        <div class="q-name" style="color:var(--red)">Q3 左下：高風險</div>
-        <div class="q-desc">正課弱 · 實驗弱 → 優先輔導</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- B1, B2, B3 新增圖表 -->
-  <div class="chart-grid chart-grid-2" style="margin-top:14px">
-    <div class="chart-card">
-      <div class="chart-title" style="--accent-color:var(--accent2)">
-        <div class="dot"></div>重修改善率依學制 Δ by Program
-      </div>
-      <div class="chart-wrap" style="height:220px">
-        <canvas id="chartDeltaByProgram"></canvas>
-      </div>
-    </div>
-    <div class="chart-card">
-      <div class="chart-title" style="--accent-color:var(--accent3)">
-        <div class="dot"></div>重修次數分布 Retake Count Distribution
-      </div>
-      <div class="chart-wrap" style="height:220px">
-        <canvas id="chartRetakeCount"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <div class="chart-card" style="margin-top:14px">
-    <div class="chart-title" style="--accent-color:var(--accent4)">
-      <div class="dot"></div>首修成績 vs 重修進步幅度 First Score vs Δ
-      <span style="color:var(--text-dim);font-size:9px;margin-left:6px">— 右下方代表首修高但重修退步，左上方代表首修低但重修大幅改善</span>
-    </div>
-    <div class="chart-wrap" style="height:240px">
-      <canvas id="chartFirstVsDelta"></canvas>
-    </div>
-  </div>
+<!-- ══ PANEL B (legacy hidden shell, keeps bFilterType for renderB() compat) ══ -->
+<div style="display:none">
+  <select id="bFilterType"><option value="theory">正課</option><option value="practicum">實驗</option></select>
+  <button class="mode-btn active" data-legacy="modeBySheet"></button>
+  <button class="mode-btn" data-legacy="modeByStudent"></button>
 </div>
+<div style="display:none" id="panelB"></div>
 
-<!-- ══ PANEL C ══ -->
+<!-- ══ PANEL C ══ (整合：個案追蹤 + 重修分析) -->
 <div class="panel" id="panelC">
-  <div class="filter-bar">
+
+  <!-- ── 第一層：常駐搜尋列 ── -->
+  <div class="filter-bar" style="flex-wrap:wrap;gap:10px 16px">
     <span class="filter-label">搜尋學號 Search ID</span>
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
       <input type="text" id="cSearch" placeholder="輸入學號片段（如 1211、****01）" oninput="searchStudent()" autocomplete="off">
       <div class="search-results" id="searchResults"></div>
     </div>
+    <div class="filter-sep"></div>
+    <span class="filter-label">學年度 Year</span>
+    <select id="cFilterYear" onchange="renderCView()">
+      <option value="all">全部學年</option>
+    </select>
+    <div class="filter-sep"></div>
+    <span class="filter-label">學制 Program</span>
+    <select id="cFilterProgram" onchange="renderCView()">
+      <option value="all">全部學制</option>
+      <option value="2yr_gen">二技一般</option>
+      <option value="2yr_work">二技在職</option>
+      <option value="2yr_night">二技夜間</option>
+      <option value="4yr">四技一般</option>
+      <option value="post">學士後護</option>
+      <option value="retake_class">重修班</option>
+      <option value="retake_student">重修生</option>
+    </select>
+    <div class="filter-sep"></div>
+    <span class="filter-label">評量 Exam</span>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="cExamSem" onclick="setCExam('semester_score')">學期</button>
+      <button class="mode-btn" id="cExamMid" onclick="setCExam('midterm')">期中</button>
+      <button class="mode-btn" id="cExamFin" onclick="setCExam('final')">期末</button>
+    </div>
   </div>
 
-  <!-- C2 & C3: 全班層級摘要圖（不需選人） -->
-  <div class="chart-grid chart-grid-2" style="margin-bottom:14px">
-    <div class="chart-card">
-      <div class="chart-title" style="--accent-color:var(--accent3)">
-        <div class="dot"></div>各學期異常事件密度 Anomaly Density by Semester
-        <span style="color:var(--text-dim);font-size:9px;margin-left:4px">— 全體學生異常標籤彙總</span>
-      </div>
-      <div class="chart-wrap" style="height:200px">
-        <canvas id="chartAnomalyDensity"></canvas>
-      </div>
+  <!-- ── 第二層：族群視圖切換 ── -->
+  <div style="display:flex;align-items:center;gap:8px;margin:10px 0 14px">
+    <div class="view-controls-seg" id="cViewControls">
+      <button class="seg-btn active" data-view="general" onclick="switchCView('general')">全體學生</button>
+      <button class="seg-btn" data-view="retake" onclick="switchCView('retake')">重修分析</button>
     </div>
-    <div class="chart-card">
-      <div class="chart-title" style="--accent-color:var(--accent4)">
-        <div class="dot"></div>重修生首修成績分布 Retaker First-Score Distribution
-        <span style="color:var(--text-dim);font-size:9px;margin-left:4px">— 哪個分數段最容易重修</span>
+    <span id="cNoDataHint" style="display:none;font-size:10px;color:var(--yellow);margin-left:8px">⚠ 此學期無 LMS 行為資料</span>
+  </div>
+
+  <!-- ── 個案搜尋結果（常駐，搜尋後展開） ── -->
+  <div id="profileWrap" style="margin-bottom:14px">
+    <!-- empty state by default, filled when student selected -->
+  </div>
+
+  <!-- ── 統計卡 ── -->
+  <div class="stat-row" id="cStats"></div>
+
+  <!-- ── 視圖面板：全體學生 ── -->
+  <div id="cPanelGeneral" class="c-view-panel">
+    <div class="chart-grid chart-grid-2" style="margin-bottom:14px">
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent)">
+          <div class="dot"></div>成績級距分布 Score Distribution
+        </div>
+        <div class="chart-wrap" style="height:220px">
+          <canvas id="cChartDist"></canvas>
+        </div>
       </div>
-      <div class="chart-wrap" style="height:200px">
-        <canvas id="chartRetakerFirstDist"></canvas>
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent3)">
+          <div class="dot"></div>各學期異常事件密度 Anomaly Density by Semester
+          <span style="color:var(--text-dim);font-size:9px;margin-left:4px">— 全體學生異常標籤彙總</span>
+        </div>
+        <div class="chart-wrap" style="height:220px">
+          <canvas id="chartAnomalyDensity"></canvas>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 個案搜尋結果 -->
-  <div id="profileWrap">
-    <div class="empty-state">
-      請在上方搜尋學號以查看個案資料<br>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim)">Search a student ID fragment above</span>
+  <!-- ── 視圖面板：重修分析 ── -->
+  <div id="cPanelRetake" class="c-view-panel" style="display:none">
+    <!-- 統計摘要 -->
+    <div class="stat-row" id="bStats" style="margin-bottom:14px"></div>
+
+    <!-- 顯示模式切換 -->
+    <div class="filter-bar" style="padding:8px 0;background:none;border:none;margin-bottom:10px">
+      <span class="filter-label">顯示模式 Mode</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="modeBySheet" onclick="setBMode('sheet')">依班級名稱</button>
+        <button class="mode-btn" id="modeByStudent" onclick="setBMode('student')">同學號全紀錄</button>
+      </div>
+      <div class="filter-sep"></div>
+      <span class="filter-label">課程類型 Type</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="bTypeTheory" onclick="setBType('theory')">正課</button>
+        <button class="mode-btn" id="bTypePracticum" onclick="setBType('practicum')">實驗課</button>
+      </div>
+    </div>
+
+    <div class="chart-grid chart-grid-2">
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent4)">
+          <div class="dot"></div>首修 → 重修 進退步 Slope Chart
+        </div>
+        <div class="slope-wrap">
+          <svg id="slopeChart" class="slope-svg" height="280"></svg>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent3)">
+          <div class="dot"></div>Δ 分佈 Delta Distribution
+        </div>
+        <div class="chart-wrap" style="height:240px">
+          <canvas id="chartDelta"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-card" id="quadrantCard" style="display:none;margin-top:14px">
+      <div class="chart-title" style="--accent-color:var(--accent2)">
+        <div class="dot"></div>正課 × 實驗 四象限 Cross-Domain Quadrant
+        <span style="color:var(--text-dim);font-size:9px;margin-left:6px">⚠ 此圖同時比較正課與實驗課，不受上方課程篩選影響</span>
+      </div>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="chartQuadrant"></canvas>
+      </div>
+      <div class="quadrant-labels">
+        <div class="q-label"><div class="q-name" style="color:var(--accent2)">Q1 右上：雙強</div><div class="q-desc">正課強 · 實驗強 → 無需介入</div></div>
+        <div class="q-label"><div class="q-name" style="color:var(--accent3)">Q2 左上：實作強</div><div class="q-desc">正課弱 · 實驗強 → 加強流病報告邏輯</div></div>
+        <div class="q-label"><div class="q-name" style="color:var(--accent3)">Q4 右下：學理強</div><div class="q-desc">正課強 · 實驗弱 → 補充致病機轉概念</div></div>
+        <div class="q-label"><div class="q-name" style="color:var(--red)">Q3 左下：高風險</div><div class="q-desc">正課弱 · 實驗弱 → 優先輔導</div></div>
+      </div>
+    </div>
+
+    <div class="chart-grid chart-grid-2" style="margin-top:14px">
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent4)">
+          <div class="dot"></div>重修生首修成績分布 Retaker First-Score Distribution
+          <span style="color:var(--text-dim);font-size:9px;margin-left:4px">— 哪個分數段最容易重修</span>
+        </div>
+        <div class="chart-wrap" style="height:200px">
+          <canvas id="chartRetakerFirstDist"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent2)">
+          <div class="dot"></div>重修改善率依學制 Δ by Program
+        </div>
+        <div class="chart-wrap" style="height:200px">
+          <canvas id="chartDeltaByProgram"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="chart-grid chart-grid-2" style="margin-top:14px">
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent3)">
+          <div class="dot"></div>重修次數分布 Retake Count Distribution
+        </div>
+        <div class="chart-wrap" style="height:220px">
+          <canvas id="chartRetakeCount"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent4)">
+          <div class="dot"></div>首修成績 vs 重修進步幅度 First Score vs Δ
+          <span style="color:var(--text-dim);font-size:9px;margin-left:6px">— 右下方代表首修高但重修退步</span>
+        </div>
+        <div class="chart-wrap" style="height:220px">
+          <canvas id="chartFirstVsDelta"></canvas>
+        </div>
+      </div>
     </div>
   </div>
+
 </div>
 
 <!-- ══ PANEL D ══ -->
@@ -1582,8 +1654,8 @@ body.light .subject-input {
               </tr>
             </thead>
             <tbody>
-              <tr><td style="padding:5px 10px">P1</td><td style="padding:5px 10px">影音輔導型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">VID 完成率 ≥ 70% 或 TUT 時間充足</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px">P2</td><td style="padding:5px 10px">彈性聽覺型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">AUD 完成率 ≥ 70%，較少使用影片</td></tr>
+              <tr><td style="padding:5px 10px">P1</td><td style="padding:5px 10px">影音輔導型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">VID 完成率 ≥ 50% 或 TUT 時間充足</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px">P2</td><td style="padding:5px 10px">彈性聽覺型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">AUD 完成率 ≥ 50%，較少使用影片</td></tr>
               <tr><td style="padding:5px 10px">P3</td><td style="padding:5px 10px">平均使用型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">各類教材平均使用（預設分群）</td></tr>
               <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px">P4</td><td style="padding:5px 10px">題庫刷題型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">QUZ 作答次數多且佔整體比例高</td></tr>
               <tr><td style="padding:5px 10px">P5</td><td style="padding:5px 10px">被動低參與型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">總學習時間少、教材多樣性低</td></tr>
@@ -1602,9 +1674,9 @@ body.light .subject-input {
             </thead>
             <tbody>
               <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">AUD</td><td style="padding:5px 10px">聽覺教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">音檔、語音講解等聽覺教材的完成情形。</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">VID</td><td style="padding:5px 10px">影音教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">教學影片、EverCam、動畫解析等影音教材的完成情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">VID</td><td style="padding:5px 10px">影音教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">教學影片、EverCam 等影音教材的完成情形。</td></tr>
               <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">TXT</td><td style="padding:5px 10px">文字教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">講義、參考教材、延伸閱讀等文字資源的完成情形。</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">SUP</td><td style="padding:5px 10px">補充筆記</td><td style="padding:5px 10px;color:var(--text-dim,#888)">補充教材、整理筆記、學習單等支援資源的完成情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">SUP</td><td style="padding:5px 10px">補充筆記</td><td style="padding:5px 10px;color:var(--text-dim,#888)">補充教材、整理筆記、學習單、動畫解析等支援資源的完成情形。</td></tr>
               <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">TUT</td><td style="padding:5px 10px">輔導資源</td><td style="padding:5px 10px;color:var(--text-dim,#888)">課輔、解題、重點複習等輔導類資源的使用情形。</td></tr>
               <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">QUZ</td><td style="padding:5px 10px">題庫測驗</td><td style="padding:5px 10px;color:var(--text-dim,#888)">題庫、測驗、練習題等作答或完成情形。</td></tr>
             </tbody>
@@ -2824,6 +2896,9 @@ function populateFilters() {
   aTrend.innerHTML = trendSheets.map(s => `<option value="${s}">${s}</option>`).join('');
 
   updateSheetFilter();
+
+  // Panel C — 學年度選單（分組折疊）
+  populateCYearFilter();
 }
 
 function updateSheetFilter() {
@@ -3128,9 +3203,214 @@ function getRetakerRecords() {
   );
 }
 
+// ══════════════════════════════════════════════════════════
+// PANEL C — 整合控制器 (個案追蹤 + 重修分析)
+// ══════════════════════════════════════════════════════════
+
+// 全域狀態
+let cCurrentView = 'general';   // 'general' | 'retake'
+let cCurrentExam = 'semester_score';  // 'semester_score' | 'midterm' | 'final'
+
+/* 切換族群視圖 */
+function switchCView(view) {
+  cCurrentView = view;
+  document.querySelectorAll('.seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === view)
+  );
+  document.getElementById('cPanelGeneral').style.display = view === 'general' ? '' : 'none';
+  document.getElementById('cPanelRetake').style.display  = view === 'retake'  ? '' : 'none';
+  renderCView();
+}
+
+/* 切換評量指標 */
+function setCExam(metric) {
+  cCurrentExam = metric;
+  ['cExamSem','cExamMid','cExamFin'].forEach(id =>
+    document.getElementById(id)?.classList.remove('active')
+  );
+  const map = { semester_score:'cExamSem', midterm:'cExamMid', final:'cExamFin' };
+  document.getElementById(map[metric])?.classList.add('active');
+  renderCView();
+}
+
+/* 依目前視圖重繪 */
+function renderCView() {
+  if (!DATA) return;
+  if (cCurrentView === 'general') {
+    renderCAnomalyAndDist();
+    renderCStats();
+  } else {
+    renderCRetakeStats();   // 頂端統計卡
+    renderB();              // 重修圖表主體
+    renderRetakerFirstDist();
+  }
+}
+
+/* 一次性初始化 Panel C（切換到此頁籤時呼叫） */
+function initCPanel() {
+  if (!DATA) return;
+  populateCYearFilter();
+  setBType('theory');   // 初始化重修視圖的課程類型按鈕 active 狀態
+  renderCView();
+  // 只在尚未有真實個案結果時才顯示 empty state
+  const pw = document.getElementById('profileWrap');
+  if (pw && !pw.querySelector('[data-student-profile]')) {
+    pw.innerHTML = '<div class="empty-state">請在上方搜尋學號以查看個案資料<br><span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--text-dim)">Search a student ID fragment above</span></div>';
+  }
+}
+
+/* 建立學年度選單（依 meta.semesters，分組折疊為學年） */
+function populateCYearFilter() {
+  const sel = document.getElementById('cFilterYear');
+  if (!sel || !DATA) return;
+  const prevVal = sel.value; // 保留使用者已選的值
+  // 統一轉為字串，避免 JSON 數字與 select.value 字串比較失誤
+  const sems = (DATA.meta.semesters || []).map(String);
+
+  // 收集所有學年（取學期前3碼）
+  const years = [...new Set(sems.map(s => s.slice(0,3)))].sort((a,b) => b-a);
+
+  // 建立 optgroup，每學年含第1、第2學期
+  let html = '<option value="all">全部學年</option>';
+  years.forEach(yr => {
+    const label = `${yr} 學年度`;
+    const sem1 = yr + '1';
+    const sem2 = yr + '2';
+    const avail1 = sems.includes(sem1);
+    const avail2 = sems.includes(sem2);
+    html += `<optgroup label="${label}">`;
+    if (avail1) html += `<option value="${sem1}">${yr}(1) 第一學期</option>`;
+    if (avail2) html += `<option value="${sem2}">${yr}(2) 第二學期</option>`;
+    html += `</optgroup>`;
+  });
+  sel.innerHTML = html;
+  // 還原上次選擇；若該學期已不存在則 fallback 'all'
+  if (prevVal && prevVal !== 'all' && sel.querySelector(`option[value="${prevVal}"]`)) {
+    sel.value = prevVal;
+  }
+}
+
+/* 取得目前 C 篩選條件下的 records */
+function getCFilteredRecords() {
+  if (!DATA) return [];
+  const yearVal = document.getElementById('cFilterYear')?.value || 'all';
+  const progVal = document.getElementById('cFilterProgram')?.value || 'all';
+
+  const result = [];
+  Object.values(DATA.students).forEach(stu => {
+    stu.records.forEach(r => {
+      // 學年度篩選
+      if (yearVal !== 'all' && String(r.semester) !== String(yearVal)) return;
+      // 學制篩選（對齊 classInfo().program）
+      if (progVal !== 'all' && classInfo(r.sheet_name || '', r.semester).program !== progVal) return;
+      result.push({ ...r, masked: stu.name_masked });
+    });
+  });
+  return result;
+}
+
+/* 全體學生視圖：成績分布 + 異常密度 */
+function renderCAnomalyAndDist() {
+  // 異常密度（原 renderAnomalyDensity，不受 C 篩選影響，維持全體）
+  renderAnomalyDensity();
+
+  // 成績分布（依 C 篩選）
+  const recs = getCFilteredRecords().filter(r => {
+    const s = r[cCurrentExam];
+    return s != null && !isNaN(s);
+  });
+
+  const buckets = Array(11).fill(0);
+  recs.forEach(r => {
+    const s = r[cCurrentExam];
+    const idx = s >= 100 ? 10 : Math.floor(s / 10);
+    buckets[Math.min(idx, 10)]++;
+  });
+
+  const labels = ['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-99','100'];
+  const isDark = !document.body.classList.contains('light');
+  const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+  const textColor = isDark ? '#9aa0b8' : '#4a5070';
+
+  mkChart('cChartDist', {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '人次',
+        data: buckets,
+        backgroundColor: buckets.map((_,i) => i < 6 ? 'rgba(240,112,112,0.7)' : 'rgba(79,142,247,0.7)'),
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+/* C 全體統計卡 */
+function renderCStats() {
+  const recs = getCFilteredRecords().filter(r => r[cCurrentExam] != null);
+  const scores = recs.map(r => r[cCurrentExam]).filter(s => !isNaN(s));
+  if (!scores.length) { document.getElementById('cStats').innerHTML = ''; return; }
+  const avg = (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1);
+  const pass = scores.filter(s=>s>=60).length;
+  const passRate = ((pass/scores.length)*100).toFixed(1);
+  document.getElementById('cStats').innerHTML = `
+    <div class="stat-card" style="--accent-color:var(--accent)">
+      <div class="val">${scores.length}</div><div class="lbl">記錄筆數</div>
+    </div>
+    <div class="stat-card" style="--accent-color:var(--accent2)">
+      <div class="val">${avg}</div><div class="lbl">平均分</div>
+    </div>
+    <div class="stat-card" style="--accent-color:var(--green)">
+      <div class="val">${passRate}%</div><div class="lbl">及格率</div>
+    </div>
+  `;
+}
+
+/* C 重修統計卡（顯示在重修視圖上方） */
+function renderCRetakeStats() {
+  const retakers = getRetakerRecords();
+  const allDeltas = retakers.flatMap(r => r.recs.filter(rec => rec.delta != null).map(rec => rec.delta));
+  const improved = allDeltas.filter(d=>d>0).length;
+  const worsened = allDeltas.filter(d=>d<0).length;
+  const avgDelta = allDeltas.length ? (allDeltas.reduce((a,b)=>a+b,0)/allDeltas.length).toFixed(1) : '–';
+  document.getElementById('cStats').innerHTML = `
+    <div class="stat-card" style="--accent-color:var(--accent4)">
+      <div class="val">${retakers.length}</div><div class="lbl">重修學生</div>
+    </div>
+    <div class="stat-card" style="--accent-color:var(--green)">
+      <div class="val">${improved}</div><div class="lbl">進步 Δ &gt; 0</div>
+    </div>
+    <div class="stat-card" style="--accent-color:var(--red)">
+      <div class="val">${worsened}</div><div class="lbl">退步 Δ &lt; 0</div>
+    </div>
+    <div class="stat-card" style="--accent-color:var(--accent3)">
+      <div class="val">${avgDelta}</div><div class="lbl">平均 Δ</div>
+    </div>
+  `;
+}
+
+/* 重修模式切換輔助（原 setBMode + bFilterType 的橋接） */
+function setBType(type) {
+  const sel = document.getElementById('bFilterType');
+  if (sel) sel.value = type;
+  ['bTypeTheory','bTypePracticum'].forEach(id => document.getElementById(id)?.classList.remove('active'));
+  document.getElementById(type === 'theory' ? 'bTypeTheory' : 'bTypePracticum')?.classList.add('active');
+  renderB();
+}
+
 function renderB() {
   const retakers = getRetakerRecords();
   const type = document.getElementById('bFilterType').value;
+
 
   // Stats
   const allDeltas = retakers.flatMap(r =>
@@ -3397,7 +3677,7 @@ function renderProfile(sid) {
   allExc.forEach(e => excCounts[e.color] = (excCounts[e.color]||0)+1);
 
   let html = `
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    <div data-student-profile style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
       <div style="font-family:'Space Mono',monospace;font-size:20px;color:var(--text)">${escapeHtml(data.name_masked)}</div>
       ${isRetaker ? '<span class="tag tag-red">重修生 Retaker</span>' : ''}
       ${excCounts.red    ? `<span class="tag tag-red">🔴 ${excCounts.red} 重大違規</span>` : ''}
@@ -4029,12 +4309,13 @@ function renderCorrelation(filtered) {
 
 function switchTab(tab) {
   closeExpandedChart();
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['D','A','C','B','L','P'][i]===tab));
+  // Tab 陣列：D, A, C(整合), L, P（已移除獨立 B tab）
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['D','A','C','L','P'][i]===tab));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('panel'+tab).classList.add('active');
+  const panel = document.getElementById('panel'+tab);
+  if (panel) panel.classList.add('active');
   if (tab === 'A') renderA();
-  if (tab === 'B') renderB();
-  if (tab === 'C') { renderAnomalyDensity(); renderRetakerFirstDist(); }
+  if (tab === 'C') { initCPanel(); }
   if (tab === 'D') renderD();
   if (tab === 'L') BehaviorTabManager.lazyInit();
   if (tab === 'P') renderPrintPanel();
@@ -4073,8 +4354,7 @@ function toggleTheme() {
     const tabs = [...document.querySelectorAll('.tab')];
     const tabId = ['D','A','C','B','P'][tabs.indexOf(activeTab)];
     if (tabId === 'A') { renderA(); renderTrend(); }
-    if (tabId === 'B') renderB();
-    if (tabId === 'C') { renderAnomalyDensity(); renderRetakerFirstDist(); }
+    if (tabId === 'C') renderCView();
     if (tabId === 'D') renderD();
     if (tabId === 'P') renderPrintPanel();
     // Re-attach chart title buttons after re-render
@@ -4647,7 +4927,7 @@ const PRINT_TAB_LABELS = { D: '整屆', A: '班級', C: '個案', B: '重修', L
 
 function printYears() {
   if (!DATA?.meta?.semesters?.length) return [];
-  return [...new Set(DATA.meta.semesters.map(s => String(s).slice(0, 3)))].sort();
+  return [...new Set(DATA.meta.semesters.map(s => String(s).slice(0, 3)))].sort((a,b) => b-a);
 }
 
 function populatePrintYearFilters() {
@@ -4660,8 +4940,8 @@ function populatePrintYearFilters() {
   const prevEnd = end.value;
   start.innerHTML = options;
   end.innerHTML = options;
-  start.value = years.includes(prevStart) ? prevStart : years[0] || '';
-  end.value = years.includes(prevEnd) ? prevEnd : years[years.length - 1] || '';
+  start.value = years.includes(prevStart) ? prevStart : years[years.length - 1] || '';
+  end.value   = years.includes(prevEnd)   ? prevEnd   : years[0] || '';
   syncPrintYearRange();
 }
 
@@ -4684,10 +4964,10 @@ function getPrintYearRange() {
 
 function getPrintSemesters() {
   const { start, end } = getPrintYearRange();
-  return (DATA?.meta?.semesters || []).filter(s => {
+  return sortSemestersDesc((DATA?.meta?.semesters || []).filter(s => {
     const year = String(s).slice(0, 3);
     return (!start || year >= start) && (!end || year <= end);
-  });
+  }));
 }
 
 function updatePrintChoiceState() {
