@@ -397,7 +397,6 @@ const BehaviorTimeTab = (() => {
     const maxStudents    = Math.max(...activeStudents.filter(v => v != null), 1);
 
     if (_charts.weeklyQuiz) _charts.weeklyQuiz.destroy();
-    try { Chart.register(examLinePlugin); } catch (_) {}
 
     _charts.weeklyQuiz = new Chart(canvas.getContext("2d"), {
       type: "line",
@@ -875,8 +874,11 @@ const BehaviorTimeTab = (() => {
     }
 
     if (_charts.hourlyLine) _charts.hourlyLine.destroy();
+    // 明確覆蓋 examVerticalLines plugin（避免全域 register 汙染此圖）
+    const _noExamLines = { id: "examVerticalLines", afterDraw() {} };
     _charts.hourlyLine = new Chart(canvas.getContext("2d"), {
       type: "line",
+      plugins: [_noExamLines],
       data: { labels: HOUR_LABELS, datasets },
       options: {
         responsive: true, maintainAspectRatio: false,
