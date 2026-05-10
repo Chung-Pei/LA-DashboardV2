@@ -1,13 +1,29 @@
 /**
- * tab-behavior-time.js
- * Phase 2C：時間分析 Tab
- *   - 週強度折線圖（題庫作答）
- *   - 平時及考前學習強度
- *   - 學習時段圓環圖
+ * tab-behavior-time.js  —  v2.1
+ * Phase 2C：時間分析 Tab（升級版）
+ *
+ * 新增功能：
+ *   - renderStudyHeatmap()        學習規律熱力圖（SVG，7×24）
+ *   - renderHourlyLine()          24小時學習趨勢折線（Chart.js，含分群疊加）
+ *   - renderAIInsightBadge()      AI 智慧洞察文字框
+ *
+ * 保留原有功能：
+ *   - renderWeeklyQuiz()          各週題庫作答強度
+ *   - renderPreExamIntensity()    平時及考前學習強度（考前分型圓環）
+ *   - renderTimeSlotDonut()       學習時段分布（四段圓環，保留）
+ *
+ * 資料來源：time_distribution.json v2.1
+ *   新欄位：class_heatmap_matrix、class_avg_hourly_distribution、cohort_hourly
+ *           students[i].heatmap_matrix、students[i].hourly_distribution
+ *
  * 依賴：Chart.js、behavior-loader.js
  */
 
 const BehaviorTimeTab = (() => {
+
+  // ── 常數定義 ────────────────────────────────────────────────
+
+  const PASS_THRESHOLD = 60;   // WARN-2：及格門檻統一由此常數控制
 
   const SLOT_LABELS = {
     MORNING:    "上午 06-12",
@@ -38,22 +54,35 @@ const BehaviorTimeTab = (() => {
     P5: "被動低參與型",
   };
 
-  // 分型對應規格書 V2.1：優先級 low_invest > crammer > consistent > early
   const PREP_TYPES = [
-    { key: "low_invest",  label: "學習低投入型", color: "rgba(158, 158, 158, 0.85)" }, // #9E9E9E
-    { key: "crammer",     label: "高度衝刺型",   color: "rgba(255, 82,  82,  0.85)" }, // #FF5252
-    { key: "consistent",  label: "規律分散型",   color: "rgba(76,  175, 80,  0.85)" }, // #4CAF50
-    { key: "early",       label: "提早完成型",   color: "rgba(33,  150, 243, 0.85)" }, // #2196F3
+    { key: "low_invest",  label: "學習低投入型", color: "rgba(158, 158, 158, 0.85)" },
+    { key: "crammer",     label: "高度衝刺型",   color: "rgba(255, 82,  82,  0.85)" },
+    { key: "consistent",  label: "規律分散型",   color: "rgba(76,  175, 80,  0.85)" },
+    { key: "early",       label: "提早完成型",   color: "rgba(33,  150, 243, 0.85)" },
   ];
 
-  let _quizData = null;
-  let _timeData = null;
+  const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+  const HOUR_LABELS    = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+
+  // 24小時折線圖顏色
+  const COHORT_COLORS = {
+    class: { border: "rgba(52,  152, 219, 0.9)", bg: "rgba(52, 152, 219, 0.12)" },
+    top25: { border: "rgba(46,  204, 113, 0.9)", bg: "rgba(46, 204, 113, 0.12)" },
+    pass:  { border: "rgba(241, 196, 15,  0.9)", bg: "rgba(241,196, 15,  0.10)" },
+    fail:  { border: "rgba(231, 76,  60,  0.8)", bg: "rgba(231, 76,  60,  0.08)" },
+  };
+
+  // ── 狀態 ────────────────────────────────────────────────────
+  let _quizData     = null;
+  let _timeData     = null;
   let _behaviorData = null;
-  let _charts = {};
+  let _charts       = {};
   let _filterSemester = "all";
-  let _filterCluster = "all";
-  let _filterPass = "all";
-  let _allSemesters = [];
+  let _filterCluster  = "all";
+  let _filterPass     = "all";
+  let _allSemesters   = [];
+
+  // ── 工具函式 ─────────────────────────────────────────────────
 
   function _avg(values) {
     const nums = values.filter(v => v != null && isFinite(v));
@@ -77,7 +106,7 @@ const BehaviorTimeTab = (() => {
 
   function _isPassing(row) {
     const score = _num(row.final_score ?? row.semester_score);
-    return Number.isFinite(score) && score >= 60;
+    return Number.isFinite(score) && score >= PASS_THRESHOLD;
   }
 
   function _weekAvgAttempts(w) {
@@ -95,13 +124,11 @@ const BehaviorTimeTab = (() => {
   }
 
   function _availableSemesters() {
-    // 僅取 lms_etl.py 產出的學習行為年度，不混入 etl.py / data.json 的成績年度
     const fromMeta = [
       ...(_behaviorData?.meta?.semesters || []),
       ...(_timeData?.meta?.semesters    || []),
       ...(_quizData?.meta?.semesters    || []),
     ];
-    // 直接從 lms_etl.py 的 students 陣列取 semester，避免走 _studentRows()（會 merge 成績年度）
     const lmsSrc = [
       ...(_behaviorData?.students || []),
       ...(_timeData?.students     || []),
@@ -110,6 +137,19 @@ const BehaviorTimeTab = (() => {
     const fromLmsRows = lmsSrc.map(s => s.semester).filter(Boolean);
     return [...new Set([...fromMeta, ...fromLmsRows])].sort();
   }
+
+  // ── 熱力圖色彩函式（模組層級，OPT-3）────────────────────────
+  // 深藍(少) → 藍 → 橙(多)
+  function _heatColor(val, maxVal) {
+    if (!val || val <= 0) return "rgba(40,46,68,0.6)";
+    const t = Math.min(val / maxVal, 1);
+    const r = Math.round(26  + t * (230 - 26));
+    const g = Math.round(32  + t * (126 - 32));
+    const b = Math.round(54  + (1 - t) * (219 - 54));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ── 初始化 & 篩選 ────────────────────────────────────────────
 
   async function init() {
     BehaviorLoader.setLoading("tab-time", true);
@@ -163,23 +203,12 @@ const BehaviorTimeTab = (() => {
 
   function onFilterChange() {
     _filterSemester = document.getElementById("timeSemFilter")?.value || "all";
-    _filterCluster = document.getElementById("timeClusterFilter")?.value || "all";
-    _filterPass = document.getElementById("timePassFilter")?.value || "all";
+    _filterCluster  = document.getElementById("timeClusterFilter")?.value || "all";
+    _filterPass     = document.getElementById("timePassFilter")?.value || "all";
     _renderAll();
   }
 
-  function _renderAll() {
-    const rows = _filteredStudentRows();
-    const countEl = document.getElementById("timeFilterCount");
-    const hasSemesterField = _studentRows(false).some(r => r.semester);
-    const semNote = _filterSemester !== "all" && !hasSemesterField
-      ? "（目前資料未含學生年度欄位，請重跑新版 ETL 取得精準分年）"
-      : "";
-    if (countEl) countEl.textContent = `共 ${rows.length.toLocaleString()} 筆${semNote}`;
-    renderWeeklyQuiz("weeklyQuizChart");
-    renderPreExamIntensity("preExamChart");
-    renderTimeSlotDonut("timeSlotChart");
-  }
+  // ── 資料列處理（原有邏輯，保留不動）────────────────────────────
 
   function _mainGradeRows() {
     const mainData = typeof DATA !== "undefined" ? DATA : window.DATA;
@@ -200,7 +229,7 @@ const BehaviorTimeTab = (() => {
   }
 
   function _studentRows(applyFilters = true) {
-    const timeByAnon = new Map((_timeData?.students || []).map(s => [s.anon_id, s]));
+    const timeByAnon   = new Map((_timeData?.students || []).map(s => [s.anon_id,   s]));
     const timeByMasked = new Map((_timeData?.students || []).map(s => [s.masked_id, s]));
     const source = (_behaviorData?.students?.length ? _behaviorData.students : _timeData?.students) || [];
     const byMasked = new Map(source.map(s => [s.masked_id, s]));
@@ -211,23 +240,29 @@ const BehaviorTimeTab = (() => {
     const rows = rowSource.map(s => {
       const timeRow = timeByAnon.get(s.anon_id) || timeByMasked.get(s.masked_id) || {};
       const features = s.features || {};
-      const profile = s.time_profile || {};
+      const profile  = s.time_profile || {};
       return {
-        anon_id: s.anon_id || timeRow.anon_id,
-        masked_id: s.masked_id || timeRow.masked_id,
-        semester: s.semester || timeRow.semester || "",
-        cluster: s.cluster || timeRow.cluster || "",
-        final_score: s.final_score ?? timeRow.final_score,
-        semester_score: s.semester_score ?? timeRow.semester_score,
-        totalMinutes: _num(features.total_learning_minutes ?? timeRow.total_learning_minutes),
-        preMidterm: _num(profile.pre_midterm_7d_minutes ?? timeRow.pre_midterm_7d_minutes),
-        preFinal: _num(profile.pre_final_7d_minutes ?? timeRow.pre_final_7d_minutes),
-        midRegular: _num(profile.midterm_regular_minutes ?? timeRow.midterm_regular_minutes),
-        finalRegular: _num(profile.final_regular_minutes ?? timeRow.final_regular_minutes),
-        midPeriod: _num(profile.midterm_period_minutes ?? timeRow.midterm_period_minutes),
-        finalPeriod: _num(profile.final_period_minutes ?? timeRow.final_period_minutes),
-        activeWeeks: _num(profile.active_weeks ?? timeRow.active_weeks),
+        anon_id:             s.anon_id || timeRow.anon_id,
+        masked_id:           s.masked_id || timeRow.masked_id,
+        semester:            s.semester || timeRow.semester || "",
+        cluster:             s.cluster  || timeRow.cluster  || "",
+        final_score:         s.final_score    ?? timeRow.final_score,
+        semester_score:      s.semester_score ?? timeRow.semester_score,
+        totalMinutes:        _num(features.total_learning_minutes ?? timeRow.total_learning_minutes),
+        preMidterm:          _num(profile.pre_midterm_7d_minutes ?? timeRow.pre_midterm_7d_minutes),
+        preFinal:            _num(profile.pre_final_7d_minutes   ?? timeRow.pre_final_7d_minutes),
+        midRegular:          _num(profile.midterm_regular_minutes ?? timeRow.midterm_regular_minutes),
+        finalRegular:        _num(profile.final_regular_minutes   ?? timeRow.final_regular_minutes),
+        midPeriod:           _num(profile.midterm_period_minutes  ?? timeRow.midterm_period_minutes),
+        finalPeriod:         _num(profile.final_period_minutes    ?? timeRow.final_period_minutes),
+        activeWeeks:         _num(profile.active_weeks  ?? timeRow.active_weeks),
         timeSlotDistribution: profile.time_slot_distribution || timeRow.time_slot_distribution || {},
+        // ── v2.1 新欄位 ──
+        heatmapRaw:          timeRow.heatmap_matrix?.raw        || {},
+        heatmapNorm:         timeRow.heatmap_matrix?.normalized || {},
+        hourlyRaw:           timeRow.hourly_distribution?.raw        || [],
+        hourlyNorm:          timeRow.hourly_distribution?.normalized || [],
+        late_night_ratio:    _num(profile.late_night_ratio ?? timeRow.late_night_ratio),
       };
     });
     return applyFilters ? _filterRows(rows) : rows;
@@ -249,11 +284,50 @@ const BehaviorTimeTab = (() => {
     });
   }
 
-  function _filteredStudentRows() {
-    return _studentRows(true);
+  // ── 列資料快取（每次 _renderAll 重置，各 render* 共用）──────
+  let _rowCache = null;   // { all: rows[], filtered: rows[] }
+
+  function _getRowCache() {
+    if (!_rowCache) {
+      const all      = _studentRows(false);
+      const filtered = _filterRows(all);
+      _rowCache = { all, filtered };
+    }
+    return _rowCache;
   }
 
-  // Chart.js 自訂 plugin：在 W9 / W18 畫紅色垂直標線
+  function _filteredStudentRows() {
+    return _getRowCache().filtered;
+  }
+
+  function _renderAll() {
+    _rowCache = null;   // 重置快取，確保本輪使用最新篩選條件
+    const cache   = _getRowCache();
+    const rows    = cache.filtered;
+    const countEl = document.getElementById("timeFilterCount");
+    const hasSemesterField = cache.all.some(r => r.semester);
+    const semNote = _filterSemester !== "all" && !hasSemesterField
+      ? "（目前資料未含學生年度欄位，請重跑新版 ETL 取得精準分年）"
+      : "";
+    if (countEl) countEl.textContent = `共 ${rows.length.toLocaleString()} 筆${semNote}`;
+
+    // ── 原有圖表 ──
+    renderWeeklyQuiz("weeklyQuizChart");
+    renderPreExamIntensity("preExamChart");
+    renderTimeSlotDonut("timeSlotChart");
+
+    // ── 新增圖表（OPT-2：rAF 避免篩選切換時卡頓）──
+    renderAIInsightBadge("aiInsightBadge");
+    requestAnimationFrame(() => {
+      renderStudyHeatmap("studyHeatmapWrap");
+      renderHourlyLine("hourlyLineChart");
+    });
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 原有圖表（完整保留）
+  // ────────────────────────────────────────────────────────────
+
   const examLinePlugin = {
     id: "examVerticalLines",
     afterDraw(chart) {
@@ -314,16 +388,16 @@ const BehaviorTimeTab = (() => {
       weeks.push({ ...fallback, ...(weekMap.get(i) || {}) });
     }
 
-    const labels = weeks.map(w => `W${w.week}`);
-    const avgAttempts = weeks.map(w => _weekAvgAttempts(w));
-    const avgPassRate = weeks.map(w => _weekPassRate(w) * 100);
+    const labels         = weeks.map(w => `W${w.week}`);
+    const avgAttempts    = weeks.map(w => _weekAvgAttempts(w));
+    const avgPassRate    = weeks.map(w => _weekPassRate(w) * 100);
     const activeStudents = weeks.map(w => _weekActiveStudents(w));
-    const validAttempts = avgAttempts.filter(v => v != null);
-    const semAvg = validAttempts.reduce((a, b) => a + b, 0) / (validAttempts.length || 1);
-    const maxStudents = Math.max(...activeStudents.filter(v => v != null), 1);
+    const validAttempts  = avgAttempts.filter(v => v != null);
+    const semAvg         = validAttempts.reduce((a, b) => a + b, 0) / (validAttempts.length || 1);
+    const maxStudents    = Math.max(...activeStudents.filter(v => v != null), 1);
 
-    if (_charts.weeklyQuiz) { _charts.weeklyQuiz.destroy(); }
-    try { Chart.register(examLinePlugin); } catch(_) {}
+    if (_charts.weeklyQuiz) _charts.weeklyQuiz.destroy();
+    try { Chart.register(examLinePlugin); } catch (_) {}
 
     _charts.weeklyQuiz = new Chart(canvas.getContext("2d"), {
       type: "line",
@@ -331,48 +405,17 @@ const BehaviorTimeTab = (() => {
       data: {
         labels,
         datasets: [
-          {
-            label: "平均作答次數",
-            data: avgAttempts,
-            borderColor: "rgba(52, 152, 219, 0.9)",
-            backgroundColor: "rgba(52, 152, 219, 0.1)",
-            fill: true,
-            tension: 0.35,
-            yAxisID: "yAttempts",
-            pointRadius: 3,
-            spanGaps: true,
-          },
-          {
-            label: "平均及格率 (%)",
-            data: avgPassRate,
-            borderColor: "rgba(39, 174, 96, 0.9)",
-            backgroundColor: "transparent",
-            borderDash: [5, 4],
-            tension: 0.35,
-            yAxisID: "yPassRate",
-            pointRadius: 2,
-            spanGaps: true,
-          },
-          {
-            label: "作答人數",
-            data: activeStudents,
-            borderColor: "rgba(127, 140, 141, 0.95)",
-            backgroundColor: "transparent",
-            borderDash: [3, 3],
-            tension: 0.2,
-            yAxisID: "yAttempts",
-            pointRadius: 2,
-            spanGaps: true,
-          },
+          { label: "平均作答次數", data: avgAttempts,    borderColor: "rgba(52,152,219,0.9)", backgroundColor: "rgba(52,152,219,0.1)", fill: true,  tension: 0.35, yAxisID: "yAttempts", pointRadius: 3, spanGaps: true },
+          { label: "平均及格率 (%)", data: avgPassRate,  borderColor: "rgba(39,174,96,0.9)",  backgroundColor: "transparent",           borderDash: [5,4], tension: 0.35, yAxisID: "yPassRate",  pointRadius: 2, spanGaps: true },
+          { label: "作答人數",     data: activeStudents, borderColor: "rgba(127,140,141,0.95)",backgroundColor: "transparent",           borderDash: [3,3], tension: 0.2, yAxisID: "yAttempts", pointRadius: 2, spanGaps: true },
         ],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false,
         interaction: { mode: "nearest", intersect: true },
         scales: {
           x: { ticks: { font: { size: 10 } } },
-          yAttempts: { position: "left", title: { display: true, text: "次數 / 人數", font: { size: 10 } }, min: 0 },
+          yAttempts: { position: "left",  title: { display: true, text: "次數 / 人數", font: { size: 10 } }, min: 0 },
           yPassRate: { position: "right", title: { display: true, text: "及格率 (%)", font: { size: 10 } }, min: 0, max: 100, grid: { drawOnChartArea: false } },
         },
         plugins: {
@@ -382,14 +425,12 @@ const BehaviorTimeTab = (() => {
               title: ctx => {
                 if (!ctx.length) return "";
                 const w = weeks[ctx[0].dataIndex];
-                const examTag = w.is_exam_week
-                  ? (w.exam_type === "final" ? " 期末考週" : " 期中考週")
-                  : (w.is_pre_exam ? " 考前週" : "");
+                const examTag = w.is_exam_week ? (w.exam_type === "final" ? " 期末考週" : " 期中考週") : (w.is_pre_exam ? " 考前週" : "");
                 return `第 ${w.week} 週${examTag}`;
               },
               label: ctx => {
                 if (ctx.dataset.label.includes("及格率")) return ` 題庫及格率：${ctx.raw.toFixed(1)}%`;
-                if (ctx.dataset.label.includes("人數")) return ` 作答人數：${Math.round(ctx.raw)} 人`;
+                if (ctx.dataset.label.includes("人數"))   return ` 作答人數：${Math.round(ctx.raw)} 人`;
                 return ` 平均作答次數：${ctx.raw.toFixed(1)} 次`;
               },
               afterBody: ctx => {
@@ -413,39 +454,25 @@ const BehaviorTimeTab = (() => {
   }
 
   function _periodValues(row, exam) {
-    const pre = exam === "midterm" ? row.preMidterm : row.preFinal;
+    const pre            = exam === "midterm" ? row.preMidterm : row.preFinal;
     const explicitRegular = exam === "midterm" ? row.midRegular : row.finalRegular;
-    const explicitPeriod = exam === "midterm" ? row.midPeriod : row.finalPeriod;
+    const explicitPeriod  = exam === "midterm" ? row.midPeriod  : row.finalPeriod;
     const period = explicitPeriod > 0 ? explicitPeriod : Math.max(row.totalMinutes, pre);
     const regular = explicitRegular > 0 ? explicitRegular : Math.max(period - pre, 0);
     return { pre, regular, period: Math.max(period, pre + regular, 0) };
   }
 
-  /**
-   * 依規格書 V2.1 判定分型（優先級順序 MECE）：
-   * 步驟一：T_total < P15 → 學習低投入型
-   * 步驟二：P_pre >= 30% → 高度衝刺型
-   *         10% <= P_pre < 30% → 規律分散型
-   *         P_pre < 10% → 提早完成型
-   *
-   * @param {object} row      - 學生資料列
-   * @param {'midterm'|'final'} exam
-   * @param {number} p15      - 全體學生 T_total 的 P15 門檻值（分鐘）
-   */
   function _prepType(row, exam, p15 = 0) {
     const { pre, period } = _periodValues(row, exam);
-    // 步驟一：低投入排除（以 period 代表該考試區間的 T_total）
     if (period <= 0 || period < p15) return "low_invest";
     const preRatio = pre / period;
-    // 步驟二：依 P_pre 區分
     if (preRatio >= 0.30) return "crammer";
     if (preRatio >= 0.10) return "consistent";
     return "early";
   }
 
-  /** 計算全體（未篩選）學生某考試區間 period 的 P15 門檻值 */
   function _calcP15(exam) {
-    const all = _studentRows(false);
+    const all = _getRowCache().all;   // 使用快取，避免重複 join
     const periods = all.map(r => _periodValues(r, exam).period).filter(v => v > 0).sort((a, b) => a - b);
     if (!periods.length) return 0;
     const idx = Math.floor(periods.length * 0.15);
@@ -456,55 +483,27 @@ const BehaviorTimeTab = (() => {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !_timeData) return;
     const rows = _filteredStudentRows();
-    const exams = [
-      { key: "midterm", label: "期中考" },
-      { key: "final",   label: "期末考" },
-    ];
-
-    // 依規格書：P15 需以全體學生計算，不受篩選影響
-    const p15Mid = _calcP15("midterm");
+    const exams = [{ key: "midterm", label: "期中考" }, { key: "final", label: "期末考" }];
+    const p15Mid   = _calcP15("midterm");
     const p15Final = _calcP15("final");
-
-    // 每個考試獨立統計 4 分型人數 → 用兩個 Doughnut
     const midCounts   = PREP_TYPES.map(t => rows.filter(r => _prepType(r, "midterm", p15Mid)   === t.key).length);
     const finalCounts = PREP_TYPES.map(t => rows.filter(r => _prepType(r, "final",   p15Final)  === t.key).length);
-    const allCounts   = [...midCounts, ...finalCounts]; // for summary cards
-
+    const allCounts   = [...midCounts, ...finalCounts];
     _renderPreExamSummary(canvas, rows, allCounts, p15Mid, p15Final);
-
-    if (_charts.preExam) { _charts.preExam.destroy(); }
-
-    // 使用 Doughnut（規格書建議），以兩組資料集分期中/期末
+    if (_charts.preExam) _charts.preExam.destroy();
     _charts.preExam = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
       data: {
         labels: PREP_TYPES.map(t => t.label),
         datasets: [
-          {
-            label: "期中考",
-            data: midCounts,
-            backgroundColor: PREP_TYPES.map(t => t.color),
-            borderWidth: 2,
-            hoverOffset: 8,
-          },
-          {
-            label: "期末考",
-            data: finalCounts,
-            backgroundColor: PREP_TYPES.map(t => t.color.replace("0.85", "0.45")),
-            borderWidth: 2,
-            hoverOffset: 8,
-          },
+          { label: "期中考", data: midCounts,   backgroundColor: PREP_TYPES.map(t => t.color),                         borderWidth: 2, hoverOffset: 8 },
+          { label: "期末考", data: finalCounts, backgroundColor: PREP_TYPES.map(t => t.color.replace("0.85", "0.45")), borderWidth: 2, hoverOffset: 8 },
         ],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: "50%",
+        responsive: true, maintainAspectRatio: false, cutout: "50%",
         plugins: {
-          legend: {
-            position: "bottom",
-            labels: { font: { size: 11 }, padding: 12, boxWidth: 22, boxHeight: 10 },
-          },
+          legend: { position: "bottom", labels: { font: { size: 11 }, padding: 12, boxWidth: 22, boxHeight: 10 } },
           tooltip: {
             callbacks: {
               title: ctx => `${ctx[0].dataset.label}・${ctx[0].label}`,
@@ -529,8 +528,7 @@ const BehaviorTimeTab = (() => {
       el.className = "pre-exam-summary";
       card.appendChild(el);
     }
-    const total = rows.length || 1;
-    // counts 順序：[mid×4, final×4]，各組順序同 PREP_TYPES：low_invest/crammer/consistent/early
+    const total    = rows.length || 1;
     const midLow   = counts[0] || 0, midCram  = counts[1] || 0;
     const finalLow = counts[4] || 0, finalCram = counts[5] || 0;
     const cardHtml = [
@@ -544,7 +542,6 @@ const BehaviorTimeTab = (() => {
         <div style="font-size:.72rem;color:var(--text-dim,#888);line-height:1.2">${label}</div>
         <div style="font-weight:700;color:var(--text-mid,#4f5f78);margin-top:3px">${value}</div>
       </div>`).join("");
-
     const semLabel     = _filterSemester === "all" ? "全部年度" : _formatSemLabel(_filterSemester);
     const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
     const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
@@ -556,7 +553,6 @@ const BehaviorTimeTab = (() => {
       `<span style="margin-right:8px">👥 ${clusterLabel}</span>` +
       `<span>✅ ${passLabel}</span>` +
       `</div>`;
-
     el.innerHTML =
       filterBadge +
       `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px;margin-top:10px">${cardHtml}</div>` +
@@ -579,13 +575,10 @@ const BehaviorTimeTab = (() => {
   function renderTimeSlotDonut(canvasId) {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !_timeData) return;
-
-    const rows = _filteredStudentRows();
-    const slots = Object.keys(SLOT_LABELS);
+    const rows   = _filteredStudentRows();
+    const slots  = Object.keys(SLOT_LABELS);
     const values = slots.map(slot => _avg(rows.map(row => _num(row.timeSlotDistribution?.[slot]))) * 100);
     const totalDaily = _avg(rows.map(row => row.totalMinutes / Math.max(row.activeWeeks || 1, 1)));
-
-    // 在圖表 card 頂部插入篩選條件 badge
     const card = canvas.closest(".chart-card") || canvas.parentElement;
     if (card) {
       let badgeEl = card.querySelector(".time-slot-filter-badge");
@@ -606,9 +599,7 @@ const BehaviorTimeTab = (() => {
         `<span>✅ ${passLabel}</span>` +
         `</div>`;
     }
-
-    if (_charts.timeSlot) { _charts.timeSlot.destroy(); }
-
+    if (_charts.timeSlot) _charts.timeSlot.destroy();
     _charts.timeSlot = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
       data: {
@@ -616,23 +607,12 @@ const BehaviorTimeTab = (() => {
         datasets: [{ data: values, backgroundColor: SLOT_COLORS, borderWidth: 2, hoverOffset: 8 }],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: "62%",
+        responsive: true, maintainAspectRatio: false, cutout: "62%",
         plugins: {
-          legend: {
-            position: "bottom",
-            align: "center",
-            labels: {
-              boxWidth: 26,
-              boxHeight: 10,
-              font: { size: 12, weight: "600" },
-              padding: 12,
-            },
-          },
+          legend: { position: "bottom", align: "center", labels: { boxWidth: 26, boxHeight: 10, font: { size: 12, weight: "600" }, padding: 12 } },
           tooltip: {
             callbacks: {
-              label: ctx => ` 佔比：${ctx.raw.toFixed(1)}%`,
+              label:      ctx => ` 佔比：${ctx.raw.toFixed(1)}%`,
               afterLabel: ctx => {
                 if (!totalDaily) return "";
                 const ratio = values[ctx.dataIndex] / 100 || 0;
@@ -646,5 +626,297 @@ const BehaviorTimeTab = (() => {
     });
   }
 
-  return { init, onFilterChange, renderWeeklyQuiz, renderPreExamIntensity, renderTimeSlotDonut };
+  // ────────────────────────────────────────────────────────────
+  // 新增功能一：AI 智慧洞察 Badge
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * renderAIInsightBadge(containerId)
+   * 插入 id="aiInsightBadge" 的容器（由 index.html 新增）
+   * 觸發條件（三選一，最嚴重的優先顯示）：
+   *   1. 深夜比例 > 40% 且成績低於全班平均 → 警告
+   *   2. 深夜比例 > 40% 但成績正常         → 提示
+   *   3. 深夜比例 <= 40%                   → 正向鼓勵
+   */
+  function renderAIInsightBadge(containerId) {
+    const el = document.getElementById(containerId);
+    if (!el || !_timeData) return;
+
+    const rows = _filteredStudentRows();
+    if (!rows.length) { el.innerHTML = ""; return; }
+
+    const avgLateNight = _avg(rows.map(r => r.late_night_ratio));
+    // WARN-7 修正：過濾 null/undefined，保留真實 0 分；不用 > 0 排除有效 0 分學生
+    const scoredRows  = rows.filter(r => r.final_score != null || r.semester_score != null);
+    const scoreValues = scoredRows.map(r => _num(r.final_score ?? r.semester_score));
+    const avgScore    = scoreValues.length
+      ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length
+      : null;
+    const lateNightPct = (avgLateNight * 100).toFixed(1);
+
+    let icon, color, borderColor, title, message;
+
+    if (avgLateNight > 0.4 && avgScore !== null && avgScore < PASS_THRESHOLD) {
+      icon = "⚠️"; color = "rgba(231,76,60,0.12)"; borderColor = "rgba(231,76,60,0.45)";
+      title = "深夜學習比例偏高，且成績低於及格線";
+      message = `目前篩選群組深夜（23:00-06:00）學習比例達 ${lateNightPct}%，平均成績 ${avgScore.toFixed(1)} 分。
+研究顯示（Fouh et al., 2014），集中於深夜且臨近截止日期的學習行為與較低學業表現顯著相關。
+建議教師關注此群學生的學習節奏，並評估是否提前介入輔導。`;
+    } else if (avgLateNight > 0.4) {
+      icon = "💡"; color = "rgba(241,196,15,0.10)"; borderColor = "rgba(241,196,15,0.40)";
+      title = "觀察到較高的深夜學習比例";
+      message = `目前篩選群組深夜學習比例為 ${lateNightPct}%。
+雖然成績尚在及格範圍，深夜學習長期可能影響睡眠與記憶鞏固效果。
+建議將部分深夜學習段落移至午後或傍晚，有助於提升學習吸收率。`;
+    } else {
+      icon = "✅"; color = "rgba(46,204,113,0.08)"; borderColor = "rgba(46,204,113,0.35)";
+      title = "學習時段分布健康";
+      message = `目前篩選群組深夜學習比例為 ${lateNightPct}%，時間管理整體良好。
+研究指出（Tabuenca et al., 2015），規律分散的學習節奏是自我調節學習能力的核心指標，
+與長期學習成效正相關。`;
+    }
+
+    el.innerHTML = `
+      <div style="
+        margin-bottom:14px;padding:12px 14px;border-radius:10px;
+        background:${color};border:1px solid ${borderColor};
+        font-size:.82rem;line-height:1.7;color:var(--text,#dde3f5)
+      ">
+        <div style="font-weight:700;margin-bottom:5px;font-size:.85rem">
+          ${icon} AI 洞察 &nbsp;<span style="font-weight:400;color:var(--text-dim,#888)">${title}</span>
+        </div>
+        <div style="color:var(--text-mid,#9aa0b8);white-space:pre-line">${message}</div>
+      </div>`;
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 新增功能二：學習規律熱力圖（SVG，7×24）
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * renderStudyHeatmap(containerId)
+   * 使用 SVG 繪製 7×24 熱力圖（優先使用 ETL 預聚合的 class_heatmap_matrix）
+   * 篩選器啟用時，從 students[] 即時加總 heatmap_raw（前端唯一運算點）
+   * hover tooltip 顯示：星期、時段、累計分鐘 / 正規化比例
+   */
+  function renderStudyHeatmap(containerId) {
+    const wrap = document.getElementById(containerId);
+    if (!wrap || !_timeData) return;
+
+    // 決定資料來源
+    let heatmapData = {};
+    const isAllFilter = (_filterSemester === "all" && _filterCluster === "all" && _filterPass === "all");
+
+    if (isAllFilter && _timeData.class_heatmap_matrix?.raw) {
+      // 無篩選：直接用 ETL 預聚合（最快）
+      heatmapData = _timeData.class_heatmap_matrix.raw;
+    } else {
+      // 有篩選：從 students[] 加總
+      const rows = _filteredStudentRows();
+      rows.forEach(r => {
+        Object.entries(r.heatmapRaw || {}).forEach(([key, val]) => {
+          heatmapData[key] = (heatmapData[key] || 0) + val;
+        });
+      });
+    }
+
+    // 計算最大值（正規化色階）
+    const vals = Object.values(heatmapData).filter(v => v > 0);
+    const maxVal = vals.length ? Math.max(...vals) : 1;
+
+    // SVG 尺寸參數
+    const cellW = 28, cellH = 22;
+    const labelW = 22, labelH = 20;
+    const svgW = labelW + 24 * cellW;
+    const svgH = labelH + 7  * cellH;
+
+    // 色彩函式已提升至模組層級（OPT-3），此處直接呼叫
+
+    // 建構 SVG
+    // BUG-2 修正：tooltip 文字改用 data-tip attribute，避免 \n 截斷 SVG attribute
+    let svgParts = [
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" style="font-family:sans-serif;display:block;overflow:visible">`,
+    ];
+
+    // 小時標籤（X 軸）
+    for (let h = 0; h < 24; h++) {
+      if (h % 3 === 0) {
+        const x = labelW + h * cellW + cellW / 2;
+        svgParts.push(`<text x="${x}" y="${labelH - 4}" text-anchor="middle" font-size="9" fill="#6b748f">${h}:00</text>`);
+      }
+    }
+
+    // 星期標籤（Y 軸）＋ 格子
+    WEEKDAY_LABELS.forEach((wd, wdIdx) => {
+      const y = labelH + wdIdx * cellH;
+      svgParts.push(`<text x="${labelW - 3}" y="${y + cellH / 2 + 4}" text-anchor="end" font-size="10" fill="#9aa0b8">${wd}</text>`);
+
+      for (let h = 0; h < 24; h++) {
+        const key = `${wdIdx}_${h}`;
+        const val = heatmapData[key] || 0;
+        const color = _heatColor(val, maxVal);
+        const x = labelW + h * cellW;
+        const mins = val > 0 ? `${Math.round(val)} 分鐘` : "無資料";
+        // tip 用 JSON.stringify 確保換行符正確編碼為 \n（不含原始換行）
+        const tipText = `星期${wd} ${h}:00–${h + 1}:00 | 累計學習：${mins}`;
+
+        svgParts.push(
+          `<rect x="${x + 1}" y="${y + 1}" width="${cellW - 2}" height="${cellH - 2}" rx="3"` +
+          ` fill="${color}" opacity="0.9"` +
+          ` data-tip="${tipText.replace(/"/g, "&quot;")}"` +
+          ` style="cursor:default;transition:opacity .15s"` +
+          `/>`
+        );
+      }
+    });
+
+    // 圖例（右下角）
+    const lgX = svgW - 100, lgY = svgH + 6;
+    svgParts.push(`<text x="${lgX}" y="${lgY + 10}" font-size="9" fill="#6b748f">少</text>`);
+    for (let i = 0; i < 8; i++) {
+      const t = i / 7;
+      const r = Math.round(26  + t * (230 - 26));
+      const g = Math.round(32  + t * (126 - 32));
+      const b = Math.round(54  + (1 - t) * (219 - 54));
+      svgParts.push(`<rect x="${lgX + 18 + i * 9}" y="${lgY}" width="8" height="10" rx="2" fill="rgb(${r},${g},${b})"/>`);
+    }
+    svgParts.push(`<text x="${lgX + 92}" y="${lgY + 10}" font-size="9" fill="#6b748f">多</text>`);
+
+    svgParts.push("</svg>");
+
+    wrap.innerHTML = `
+      <div class="heatmap-scroll" style="overflow-x:auto;padding-bottom:18px">
+        ${svgParts.join("")}
+      </div>`;
+
+    // BUG-5 修正：事件綁在永久容器 wrap 上，且只綁一次（data-heatmap-bound 旗標防重複）
+    // wrap.innerHTML 重建了內部 DOM，但 wrap 本身不重建，listener 不需重綁
+    if (!wrap.dataset.heatmapBound) {
+      wrap.dataset.heatmapBound = "1";
+      wrap.addEventListener("mouseover", e => {
+        const tip = e.target.dataset?.tip;
+        if (tip && typeof showSvgTip === "function") showSvgTip(e, tip);
+      });
+      wrap.addEventListener("mouseleave", () => {
+        if (typeof hideSvgTip === "function") hideSvgTip();
+      });
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // 新增功能三：24小時學習趨勢折線圖（含分群疊加）
+  // ────────────────────────────────────────────────────────────
+
+  /**
+   * renderHourlyLine(canvasId)
+   * X 軸：24 小時；Y 軸：正規化學習活躍度（0~1）
+   * 預設顯示：全班平均
+   * 可疊加：前25%高分群、及格群、不及格群
+   * 篩選器有效時：從 students[] 即時加總；無篩選時使用 ETL 預聚合
+   */
+  function renderHourlyLine(canvasId) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !_timeData) return;
+
+    const isAllFilter = (_filterSemester === "all" && _filterCluster === "all" && _filterPass === "all");
+    const cohort = _timeData.cohort_hourly || {};
+
+    // 全班（含篩選）
+    let classNorm;
+    if (isAllFilter && _timeData.class_avg_hourly_distribution?.normalized) {
+      classNorm = _timeData.class_avg_hourly_distribution.normalized;
+    } else {
+      const rows = _filteredStudentRows();
+      const acc  = Array(24).fill(0);
+      rows.forEach(r => (r.hourlyRaw || []).forEach((v, h) => { acc[h] += v; }));
+      const total = acc.reduce((a, b) => a + b, 0);
+      classNorm = total > 0 ? acc.map(v => v / total) : Array(24).fill(0);
+    }
+
+    // 分群（只在無篩選時使用 ETL 預聚合；有篩選時暫不疊加，避免與篩選邏輯衝突）
+    const datasets = [
+      {
+        label: "全班平均",
+        data:  classNorm,
+        borderColor: COHORT_COLORS.class.border,
+        backgroundColor: COHORT_COLORS.class.bg,
+        fill: true, tension: 0.4, pointRadius: 2, borderWidth: 2,
+      },
+    ];
+
+    if (isAllFilter) {
+      if (cohort.top25?.normalized?.length) {
+        datasets.push({
+          label: "前25%高分群",
+          data:  cohort.top25.normalized,
+          borderColor: COHORT_COLORS.top25.border,
+          backgroundColor: "transparent",
+          fill: false, tension: 0.4, pointRadius: 2, borderWidth: 2, borderDash: [5, 3],
+        });
+      }
+      if (cohort.pass?.normalized?.length) {
+        datasets.push({
+          label: "及格群",
+          data:  cohort.pass.normalized,
+          borderColor: COHORT_COLORS.pass.border,
+          backgroundColor: "transparent",
+          fill: false, tension: 0.4, pointRadius: 2, borderWidth: 1.5, borderDash: [3, 3],
+        });
+      }
+      if (cohort.fail?.normalized?.length) {
+        datasets.push({
+          label: "不及格群",
+          data:  cohort.fail.normalized,
+          borderColor: COHORT_COLORS.fail.border,
+          backgroundColor: "transparent",
+          fill: false, tension: 0.4, pointRadius: 2, borderWidth: 1.5, borderDash: [2, 4],
+        });
+      }
+    }
+
+    if (_charts.hourlyLine) _charts.hourlyLine.destroy();
+    _charts.hourlyLine = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: { labels: HOUR_LABELS, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: {
+            ticks: { font: { size: 10 }, maxTicksLimit: 12 },
+            title: { display: true, text: "時段（小時）", font: { size: 10 }, color: "#6b748f" },
+          },
+          y: {
+            min: 0,
+            ticks: {
+              font: { size: 10 },
+              callback: v => `${(v * 100).toFixed(1)}%`,
+            },
+            title: { display: true, text: "學習活躍度（正規化）", font: { size: 10 }, color: "#6b748f" },
+          },
+        },
+        plugins: {
+          legend: { position: "bottom", labels: { font: { size: 11 }, boxWidth: 22, boxHeight: 8, padding: 12 } },
+          tooltip: {
+            callbacks: {
+              title: ctx => ctx.length ? `${ctx[0].label}` : "",
+              label: ctx => ` ${ctx.dataset.label}：${(ctx.raw * 100).toFixed(2)}%`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  // ── 公開 API ─────────────────────────────────────────────────
+  return {
+    init,
+    onFilterChange,
+    renderWeeklyQuiz,
+    renderPreExamIntensity,
+    renderTimeSlotDonut,
+    renderAIInsightBadge,
+    renderStudyHeatmap,
+    renderHourlyLine,
+  };
 })();
