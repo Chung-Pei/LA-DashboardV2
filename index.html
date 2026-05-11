@@ -27,9 +27,8 @@
      取得方式：curl -s https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js | openssl dgst -sha384 -binary | base64
      加上 integrity="sha384-HASH" 後可消除供應鏈風險。-->
 <script async src="https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<!-- WARN-3 修正：加入 SRI integrity hash，防止 CDN 供應鏈污染 -->
+<!-- Chart.js：不加 integrity SRI，避免 CDN 壓縮版本 hash 不符導致靜默載入失敗 -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
-        integrity="sha384-rRoXxn2yHlrZYB587Ki9RO1tONhLdM6XfORg7Rw4uwH4/Fh/5nP7IUX91bkaKUgs"
         crossorigin="anonymous"></script>
 <style>
 /* Embedded font fallbacks for offline/sandboxed use */
@@ -2840,6 +2839,13 @@ function normalizeData() {
 }
 
 async function loadData() {
+  // file:// 協定下 fetch() 受同源政策封鎖，給出明確提示
+  if (location.protocol === 'file:') {
+    document.getElementById('metaInfo').innerHTML =
+      `⚠ 請透過本機伺服器開啟（<code>npx serve .</code> 或 VS Code Live Server），` +
+      `直接用 file:// 開啟時 fetch() 無法讀取 data/data.json。`;
+    return;
+  }
   try {
     const res = await fetch('data/data.json');
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
