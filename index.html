@@ -1299,6 +1299,7 @@ body.light .subject-input {
       <button class="mode-btn" id="cExamMid" onclick="setCExam('midterm')">期中</button>
       <button class="mode-btn" id="cExamFin" onclick="setCExam('final')">期末</button>
     </div>
+    <span id="cSearchHint" style="margin-left:auto;font-size:11px;color:var(--text-dim);white-space:nowrap">請輸入學號片段以查看個案資料 <span style="font-family:'JetBrains Mono',monospace;font-size:10px">Search a student ID fragment above</span></span>
   </div>
 
   <!-- ── 第二層：族群視圖切換 ── -->
@@ -1311,7 +1312,7 @@ body.light .subject-input {
   </div>
 
   <!-- ── 個案搜尋結果（常駐，搜尋後展開） ── -->
-  <div id="profileWrap" style="margin-bottom:14px">
+  <div id="profileWrap">
     <!-- empty state by default, filled when student selected -->
   </div>
 
@@ -3287,7 +3288,7 @@ function initCPanel() {
   // 只在尚未有真實個案結果時才顯示 empty state
   const pw = document.getElementById('profileWrap');
   if (pw && !pw.querySelector('[data-student-profile]')) {
-    pw.innerHTML = '<div class="empty-state" style="padding:12px 20px">請在上方搜尋學號以查看個案資料<br><span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--text-dim)">Search a student ID fragment above</span></div>';
+    pw.innerHTML = '';
   }
 }
 
@@ -3694,6 +3695,8 @@ function searchStudent() {
 function selectStudent(sid) {
   document.getElementById('searchResults').classList.remove('open');
   document.getElementById('cSearch').value = DATA.students[sid].name_masked;
+  const hint = document.getElementById('cSearchHint');
+  if (hint) hint.style.display = 'none';
   renderProfile(sid);
 }
 
@@ -3701,7 +3704,8 @@ function renderProfile(sid) {
   const data = DATA.students[sid];
   const wrap = document.getElementById('profileWrap');
 
-  if (!data) { wrap.innerHTML = '<div class="empty-state">找不到學生資料</div>'; return; }
+  if (!data) { wrap.innerHTML = '<div class="empty-state">找不到學生資料</div>'; wrap.style.marginBottom = '14px'; return; }
+  wrap.style.marginBottom = '14px';
 
   const isRetaker = data.records.some(r => r.is_retaker);
   const allExc    = data.records.flatMap(r => r.exceptions);
