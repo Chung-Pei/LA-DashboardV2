@@ -49,6 +49,7 @@ const BehaviorCorrelationTab = (() => {
   let _allSemesters     = [];     // 可用學期列表
   let _filterSemester   = "all";  // 目前學期篩選
   let _filterCluster    = "all";  // 目前分群篩選
+  let _filterPass       = "all";  // 目前及格/不及格篩選
   let _corrType         = "pearson"; // "pearson" | "spearman"
 
   function _targets() {
@@ -214,7 +215,8 @@ const BehaviorCorrelationTab = (() => {
 
     const behavior = await BehaviorLoader.loadBehaviorData();
     const students = behavior.students || [];
-    const targetSemester = "";
+    // BUG-1 修正：使用實際篩選學期（而非硬編碼空字串），確保重建時不混入其他年度
+    const targetSemester = (_filterSemester !== "all") ? _filterSemester : "";
     const gradeRows = _gradeRowsFromData(mainData, targetSemester);
     const targets = _targetList(sourceData);
     const features = _featureListFromBehavior(students, sourceData);
@@ -304,6 +306,7 @@ const BehaviorCorrelationTab = (() => {
 
       _filterSemester = "all";
       _filterCluster  = "all";
+      _filterPass     = "all";
 
       _renderFilterBar(heatmapId);
       _applyFiltersAndRender(heatmapId, scatterWrapperId);
@@ -353,6 +356,12 @@ const BehaviorCorrelationTab = (() => {
       }),
     ].join("");
 
+    const passOptions = [
+      `<option value="all">全部</option>`,
+      `<option value="pass">及格</option>`,
+      `<option value="fail">不及格</option>`,
+    ].join("");
+
     const bar = document.createElement("div");
     bar.id = "corrFilterBar";
     bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)";
@@ -372,6 +381,14 @@ const BehaviorCorrelationTab = (() => {
                 style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
                 onchange="BehaviorCorrelationTab.onFilterChange()">
           ${clusterOptions}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">及格/不及格</label>
+        <select id="corrPassFilter"
+                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
+                onchange="BehaviorCorrelationTab.onFilterChange()">
+          ${passOptions}
         </select>
       </div>
       <span id="corrFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>
@@ -403,10 +420,15 @@ const BehaviorCorrelationTab = (() => {
   function onFilterChange() {
     _filterSemester = document.getElementById("corrSemFilter")?.value || "all";
     _filterCluster  = document.getElementById("corrClusterFilter")?.value || "all";
+    _filterPass     = document.getElementById("corrPassFilter")?.value || "all";
     _applyFiltersAndRender("corrHeatmap", "scatterSection");
   }
 
   // ── 取得篩選後資料 ────────────────────────────────────────
+
+  // BUG-3 修正：與 BehaviorTimeTab.PASS_THRESHOLD 對齊，統一使用此常數，
+  // 避免兩處各自硬編碼 60 造成日後不同步。
+  const PASS_THRESHOLD_CORR = 60;
 
   function _filteredScatterData() {
     const raw = _allScatterData;
@@ -420,6 +442,13 @@ const BehaviorCorrelationTab = (() => {
       }
       if (_filterCluster !== "all") {
         if ((row.cluster || "") !== _filterCluster) return false;
+      }
+      if (_filterPass !== "all") {
+        const score = _toNumber(row.semester_score ?? row.final_score ?? row.grade_total);
+        if (score === null) return false;
+        const passing = score >= PASS_THRESHOLD_CORR;
+        if (_filterPass === "pass" && !passing) return false;
+        if (_filterPass === "fail" && passing) return false;
       }
       return true;
     });
@@ -598,6 +627,16 @@ const BehaviorCorrelationTab = (() => {
     const canvas = document.getElementById("scatterChart");
     if (!canvas) return;
 
+    // BUG-2 修正：在 chart 建立前預先計算 Spearman ρ，避免每次 hover 重複 O(n) 運算
+    const rho = _spearmanValue(
+      raw.map(d => ({ features: { [feat]: d.x }, [gradeCol]: d.y })),
+      feat, gradeCol
+    );
+    // BUG-2 修正：相關係數標籤依 _corrType 動態切換（非永遠顯示 Pearson r）
+    const corrLabelInFooter = _corrType === "spearman"
+      ? (rho  != null ? `📊 Spearman ρ = ${rho  >= 0 ? "+" : ""}${rho.toFixed(3)}` : null)
+      : (r    != null ? `📈 Pearson  r = ${r    >= 0 ? "+" : ""}${r.toFixed(3)}`  : null);
+
     if (_scatterChart) { _scatterChart.destroy(); _scatterChart = null; }
 
     _scatterChart = new Chart(canvas.getContext("2d"), {
@@ -651,14 +690,11 @@ const BehaviorCorrelationTab = (() => {
               footer: ctx => {
                 if (!ctx.length) return [];
                 const lines = [];
+                // BUG-2 修正：使用提升到 render 時預算的值（不再每次 hover 重算）
                 if (r != null) {
                   const st = Math.abs(r) >= 0.5 ? "強" : Math.abs(r) >= 0.3 ? "中等" : "弱";
                   lines.push(`📈 Pearson r = ${r >= 0 ? "+" : ""}${r.toFixed(3)}  → ${st}${r >= 0 ? "正" : "負"}相關`);
                 }
-                const rho = _spearmanValue(
-                  _scatterRows(feat, gradeCol).map(d => ({ features: { [feat]: d.x }, [gradeCol]: d.y })),
-                  feat, gradeCol
-                );
                 if (rho != null) {
                   const ss = Math.abs(rho) >= 0.5 ? "強" : Math.abs(rho) >= 0.3 ? "中等" : "弱";
                   lines.push(`📊 Spearman ρ = ${rho >= 0 ? "+" : ""}${rho.toFixed(3)}  → ${ss}${rho >= 0 ? "正" : "負"}相關`);

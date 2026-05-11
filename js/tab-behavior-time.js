@@ -135,7 +135,7 @@ const BehaviorTimeTab = (() => {
       ...(_quizData?.students     || []),
     ];
     const fromLmsRows = lmsSrc.map(s => s.semester).filter(Boolean);
-    return [...new Set([...fromMeta, ...fromLmsRows])].sort();
+    return [...new Set([...fromMeta, ...fromLmsRows])].sort((a, b) => String(b).localeCompare(String(a)));
   }
 
   // ── 熱力圖色彩函式（模組層級，OPT-3）────────────────────────
@@ -170,8 +170,16 @@ const BehaviorTimeTab = (() => {
   }
 
   function _renderFilterBar() {
-    const el = document.getElementById("tab-time");
-    if (!el) return;
+    // BUG-5 修正：不再整體覆蓋 #tab-time innerHTML（會破壞圖表容器）
+    // 改為在專屬容器 #timeFilterBarAnchor 中插入，若不存在則在 #tab-time 最前面插入
+    let anchor = document.getElementById("timeFilterBarAnchor");
+    if (!anchor) {
+      const tabEl = document.getElementById("tab-time");
+      if (!tabEl) return;
+      anchor = document.createElement("div");
+      anchor.id = "timeFilterBarAnchor";
+      tabEl.insertBefore(anchor, tabEl.firstChild);
+    }
     const semOptions = [
       `<option value="all">全部年度</option>`,
       ..._allSemesters.map(s => `<option value="${s}"${s === _filterSemester ? " selected" : ""}>${_formatSemLabel(s)}</option>`),
@@ -185,7 +193,7 @@ const BehaviorTimeTab = (() => {
       `<option value="pass"${_filterPass === "pass" ? " selected" : ""}>及格</option>`,
       `<option value="fail"${_filterPass === "fail" ? " selected" : ""}>不及格</option>`,
     ].join("");
-    el.innerHTML = `
+    anchor.innerHTML = `
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)">
         <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">年度
