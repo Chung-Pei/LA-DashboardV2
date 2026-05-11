@@ -1,5 +1,10 @@
 /**
- * tab-behavior-radar.js  (patched: Fix1+Fix2+Fix3)
+ * tab-behavior-radar.js  (patched: Fix1+Fix2+Fix3+Insights)
+ * 升級內容：
+ *   - 雙層雷達圖：疊加「及格群全體基準線」（灰色虛線）
+ *   - _renderInsights()：自動文字差距洞察
+ *   - _renderRecommendations()：規則式行動建議
+ *   - _exportClusterCSV()：一鍵匯出當前分群學生名單
  */
 const BehaviorRadarTab = (() => {
   const DIM_LABELS = {
@@ -29,6 +34,25 @@ const BehaviorRadarTab = (() => {
     SUP:"sup_completion_rate",TUT:"tut_completion_rate",QUZ:"quz_completion_rate",
   };
   const RANK_MEDALS=["🥇","🥈","🥉"];
+
+  // ── 洞察設定 ──────────────────────────────────────────────
+  const INSIGHT_THRESHOLD = 0.05;   // 差距 ≥ 5% 才列入洞察
+  const MIN_PASS_COUNT    = 10;     // 及格樣本數低於此值時 fallback 至全體基準
+
+  const DIM_NAMES_ZH = {
+    AUD:"AUD 聽覺教材", VID:"VID 影音教材", TXT:"TXT 文字教材",
+    SUP:"SUP 補充筆記", TUT:"TUT 輔導資源",  QUZ:"QUZ 題庫測驗",
+  };
+
+  // 各維度缺乏時的行動建議（弱點→建議文字）
+  const RECOMMENDATION_MAP = {
+    AUD: { action:"建議教師提醒本群學生補聽音頻教材，強化語音輸入吸收。", icon:"🎧" },
+    VID: { action:"建議教師針對本群推送教學影片學習提醒，提升影音教材完成率。", icon:"📹" },
+    TXT: { action:"建議引導學生閱讀文字教材與講義，提升文本理解能力。", icon:"📖" },
+    SUP: { action:"建議提醒學生善用補充筆記與整理資源，強化知識架構。", icon:"📝" },
+    TUT: { action:"建議鼓勵本群學生積極使用輔導資源，尋求教師或同儕支援。", icon:"🧑‍🏫" },
+    QUZ: { action:"建議教師針對本群發送推播，提醒增加題庫演練時間，強化輸出練習。", icon:"📋" },
+  };
 
   let _radarChart=null,_radarData=null,_behaviorMeta={};
   let _behaviorStudents=[],_allStudents=[],_allSemesters=[];
@@ -112,6 +136,7 @@ const BehaviorRadarTab = (() => {
       _renderControls(controlsId);
       renderClusterSummary("clusterSummaryCards");
       _renderRadar(canvasId);
+      _renderInsights();
     }catch(err){BehaviorLoader.showError("tab-behavior",err.message);}
     finally{BehaviorLoader.setLoading("tab-behavior",false);}
   }
@@ -184,6 +209,7 @@ const BehaviorRadarTab = (() => {
     _renderControls("radarControls");
     renderClusterSummary("clusterSummaryCards");
     _renderRadar("radarChart");
+    _renderInsights();
   }
 
   function selectCluster(key){
@@ -191,12 +217,14 @@ const BehaviorRadarTab = (() => {
     _renderControls("radarControls");
     renderClusterSummary("clusterSummaryCards");
     _renderRadar("radarChart");
+    _renderInsights();
   }
   function selectPassFilter(key){
     _passFilter=key;
     _renderControls("radarControls");
     renderClusterSummary("clusterSummaryCards");
     _renderRadar("radarChart");
+    _renderInsights();
   }
 
   function _computeFromStudents(clusterKey,passKey,dims){
@@ -210,6 +238,17 @@ const BehaviorRadarTab = (() => {
     const sums=dims.map(()=>0),cnts=dims.map(()=>0);
     for(const s of filtered){const feats=s.features||{};dims.forEach((d,i)=>{const fk=DIM_FEATURE_MAP[d]||d.toLowerCase();const v=Number(feats[fk]??feats[d]??feats[d.toLowerCase()]);if(Number.isFinite(v)){sums[i]+=v;cnts[i]+=1;}});}
     return{count:filtered.length,values:dims.map((_,i)=>cnts[i]?sums[i]/cnts[i]:0)};
+  }
+
+  function _getPassBenchmark(dims){
+    // 取得及格群基準線 values[]，自動處理樣本不足 fallback
+    const pvf=_radarData?.pass_vs_fail;
+    if(!pvf)return null;
+    const basePvf=_radarData?._base?.pass_vs_fail||pvf;
+    const useLocal=(pvf.pass?.count||0)>=MIN_PASS_COUNT;
+    const src=useLocal?pvf.pass:basePvf.pass;
+    if(!src?.values?.length)return null;
+    return{values:src.values.map(_clampRate),count:src.count,isFallback:!useLocal};
   }
 
   function _renderRadar(canvasId){
@@ -229,6 +268,24 @@ const BehaviorRadarTab = (() => {
       if(failRow)datasets.push({label:`${clLbl} — 不及格（n=${failRow.count}）`,data:failRow.values.map(_clampRate),borderColor:CLUSTER_COLORS.fail.border,backgroundColor:_passFilter==="fail"?CLUSTER_COLORS.fail.bg:"rgba(192,57,43,0.05)",pointBackgroundColor:CLUSTER_COLORS.fail.border,borderWidth:_passFilter==="fail"?3:1.5,pointRadius:_passFilter==="fail"?4:2,borderDash:_passFilter==="pass"?[4,3]:[]});
     }
     if(!labels.length||!datasets.length){_renderEmpty(canvasId,"選定條件無足夠資料");return;}
+    // ── 疊加及格群基準線 ──────────────────────────────────
+    const bench=_getPassBenchmark(dims);
+    if(bench){
+      const benchLabel=bench.isFallback
+        ?`及格群基準（全年度，n=${bench.count}）※本學期樣本不足`
+        :`及格群平均基準（n=${bench.count}）`;
+      datasets.unshift({
+        label: benchLabel,
+        data:  bench.values,
+        borderColor:     "rgba(156,163,175,1)",
+        backgroundColor: "rgba(156,163,175,0.07)",
+        pointBackgroundColor:"rgba(156,163,175,0.8)",
+        borderWidth: 1.5,
+        pointRadius: 3,
+        borderDash: [5,5],
+        order: 99,
+      });
+    }
     _renderChart(canvasId,labels,datasets);
   }
 
@@ -344,5 +401,155 @@ const BehaviorRadarTab = (() => {
   }
   function toggleCluster(key){selectCluster(key);}
 
-  return{init,switchView,toggleCluster,renderClusterSummary,onYearChange,selectCluster,selectPassFilter};
+  // ── 策略 B & C：洞察面板 ────────────────────────────────
+
+  function _renderInsights(){
+    const panel=document.getElementById("radarInsightsPanel");
+    if(!panel)return;
+
+    // P0（全體）不顯示分群洞察
+    if(_selectedCluster==="P0"){panel.style.display="none";return;}
+
+    const dims=_dimensions();
+    const bench=_getPassBenchmark(dims);
+    if(!bench){panel.style.display="none";return;}
+
+    // 取得當前分群數值
+    const row=_getClusterAggRow(_selectedCluster,dims);
+    if(!row){panel.style.display="none";return;}
+
+    const clName=CLUSTER_NAMES[_selectedCluster]||_selectedCluster;
+    const clColor=CLUSTER_COLORS[_selectedCluster]?.border||"var(--accent)";
+
+    // 計算各維度差距
+    const diffs=dims.map((d,i)=>({
+      dim:d,
+      label:DIM_NAMES_ZH[d]||d,
+      clVal:row.values[i],
+      benchVal:bench.values[i],
+      diff:row.values[i]-bench.values[i],
+    }));
+
+    const strengths=diffs.filter(x=>x.diff>=INSIGHT_THRESHOLD)
+                         .sort((a,b)=>b.diff-a.diff);
+    const gaps=diffs.filter(x=>x.diff<=-INSIGHT_THRESHOLD)
+                    .sort((a,b)=>a.diff-b.diff)
+                    .slice(0,2);  // 最多列出最大落差前兩項
+
+    const isMobile=window.innerWidth<600;
+    const pct=v=>`${(v*100).toFixed(1)}%`;
+    const sign=v=>v>0?"+":"";
+
+    // ── 優勢項 HTML ──────────────────────────────────────
+    const strHTML=strengths.length?`
+      <div style="margin-bottom:10px">
+        <div style="font-size:.78rem;font-weight:700;color:var(--green,#64d4a8);margin-bottom:6px;letter-spacing:.04em">▲ 高於及格群基準</div>
+        ${strengths.map(x=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+            <span style="font-family:'JetBrains Mono','Courier New',monospace;font-size:.78rem;font-weight:700;color:${clColor};min-width:36px">${x.dim}</span>
+            <span style="font-size:.78rem;color:var(--text-mid,#9aa0b8);flex:1;min-width:80px">${x.label.replace(x.dim+' ','')}</span>
+            <div style="display:flex;gap:4px;align-items:center">
+              <span style="font-size:.76rem;color:var(--text-dim,#888)">${pct(x.benchVal)} →</span>
+              <span style="font-size:.82rem;font-weight:700;color:var(--green,#64d4a8)">${pct(x.clVal)}</span>
+              <span style="font-size:.76rem;color:var(--green,#64d4a8);background:rgba(100,212,168,.12);border-radius:6px;padding:1px 5px">${sign(x.diff)}${pct(x.diff)}</span>
+            </div>
+          </div>`).join("")}
+      </div>`:"";
+
+    // ── 弱點項 HTML ──────────────────────────────────────
+    const gapHTML=gaps.length?`
+      <div style="margin-bottom:10px">
+        <div style="font-size:.78rem;font-weight:700;color:var(--red,#f07070);margin-bottom:6px;letter-spacing:.04em">▼ 低於及格群基準（落差最大）</div>
+        ${gaps.map(x=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap">
+            <span style="font-family:'JetBrains Mono','Courier New',monospace;font-size:.78rem;font-weight:700;color:${clColor};min-width:36px">${x.dim}</span>
+            <span style="font-size:.78rem;color:var(--text-mid,#9aa0b8);flex:1;min-width:80px">${x.label.replace(x.dim+' ','')}</span>
+            <div style="display:flex;gap:4px;align-items:center">
+              <span style="font-size:.76rem;color:var(--text-dim,#888)">${pct(x.benchVal)} →</span>
+              <span style="font-size:.82rem;font-weight:700;color:var(--red,#f07070)">${pct(x.clVal)}</span>
+              <span style="font-size:.76rem;color:var(--red,#f07070);background:rgba(240,112,112,.12);border-radius:6px;padding:1px 5px">${sign(x.diff)}${pct(x.diff)}</span>
+            </div>
+          </div>`).join("")}
+      </div>`:"";
+
+    // ── 文字摘要 ─────────────────────────────────────────
+    const summaryParts=[];
+    if(strengths.length){
+      const topStr=strengths[0];
+      summaryParts.push(`本群學生（${_selectedCluster}）在 <strong>${topStr.label}</strong> 的使用率高出及格群基準 <strong style="color:var(--green,#64d4a8)">${pct(Math.abs(topStr.diff))}</strong>`);
+    }
+    if(gaps.length){
+      const topGap=gaps[0];
+      summaryParts.push(`但在 <strong>${topGap.label}</strong> 的參與度低於及格群基準 <strong style="color:var(--red,#f07070)">${pct(Math.abs(topGap.diff))}</strong>`);
+    }
+    const summaryHTML=summaryParts.length?`
+      <div style="font-size:.80rem;color:var(--text-mid,#9aa0b8);line-height:1.6;background:var(--surface2,#1c2030);border-left:3px solid ${clColor};border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:10px">
+        ${summaryParts.join("，")}。
+      </div>`:"";
+
+    // ── 行動建議（策略 C） ───────────────────────────────
+    const recItems=gaps.map(g=>RECOMMENDATION_MAP[g.dim]).filter(Boolean);
+    const recHTML=recItems.length?`
+      <div style="margin-bottom:10px">
+        <div style="font-size:.78rem;font-weight:700;color:var(--accent3,#f7a44f);margin-bottom:6px;letter-spacing:.04em">💡 建議措施</div>
+        ${recItems.map(r=>`
+          <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
+            <span style="font-size:1rem;line-height:1.4">${r.icon}</span>
+            <span style="font-size:.80rem;color:var(--text-mid,#9aa0b8);line-height:1.5">${r.action}</span>
+          </div>`).join("")}
+      </div>`:"";
+
+    // ── fallback 提示 ─────────────────────────────────────
+    const fallbackHTML=bench.isFallback?`
+      <div style="font-size:.74rem;color:var(--accent3,#f7a44f);margin-bottom:8px;padding:4px 8px;background:rgba(247,164,79,.08);border-radius:6px">
+        ※ 本學期及格樣本數不足（&lt;${MIN_PASS_COUNT}人），基準線已自動使用全年度資料。
+      </div>`:"";
+
+    // ── 匯出按鈕 ─────────────────────────────────────────
+    const exportHTML=`
+      <div style="margin-top:4px">
+        <button onclick="BehaviorRadarTab.exportClusterCSV()" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;border:1.5px solid ${clColor};background:transparent;color:${clColor};font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s" onmouseover="this.style.background='${CLUSTER_COLORS[_selectedCluster]?.bg||'rgba(79,142,247,.15)'}';" onmouseout="this.style.background='transparent'">
+          ⬇ 匯出 ${_selectedCluster} 學生名單（CSV）
+        </button>
+        <span style="font-size:.72rem;color:var(--text-dim,#888);margin-left:8px">共 ${row.count} 人</span>
+      </div>`;
+
+    panel.style.display="block";
+    panel.innerHTML=`
+      <div style="border:1px solid var(--border,#2a2f45);border-radius:10px;padding:${isMobile?'10px':'14px'};background:var(--surface,#13161f);margin-bottom:14px">
+        <div style="font-size:.82rem;font-weight:700;color:var(--text,#dde3f5);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${clColor}"></span>
+          學習行為洞察 — ${_selectedCluster} ${clName}
+        </div>
+        ${fallbackHTML}
+        ${summaryHTML}
+        ${strHTML}
+        ${gapHTML}
+        ${recHTML}
+        ${exportHTML}
+      </div>`;
+  }
+
+  function exportClusterCSV(){
+    const students=_behaviorStudents;
+    if(!students||!students.length){alert("無學生資料可匯出");return;}
+    const filtered=students.filter(s=>_selectedCluster==="P0"||s.cluster===_selectedCluster);
+    if(!filtered.length){alert("目前篩選條件下無學生資料");return;}
+    const dims=_dimensions();
+    const header=["masked_id","cluster","semester","final_score",...dims.map(d=>d.toLowerCase()+"_rate")].join(",");
+    const rows=filtered.map(s=>{
+      const feats=s.features||{};
+      const dimVals=dims.map(d=>{const fk=DIM_FEATURE_MAP[d]||d.toLowerCase()+"_completion_rate";return(Number(feats[fk]??feats[d]??0)*100).toFixed(1)+"%";});
+      return[s.masked_id||"",s.cluster||"",s.semester||"",s.final_score??s.semester_score??"",...dimVals].join(",");
+    });
+    const csv="\uFEFF"+[header,...rows].join("\r\n");
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=`${_selectedCluster}_students_${_selectedSemester==="all"?"all":_selectedSemester}.csv`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  return{init,switchView,toggleCluster,renderClusterSummary,onYearChange,selectCluster,selectPassFilter,exportClusterCSV};
 })();
