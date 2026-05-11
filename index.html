@@ -1630,6 +1630,8 @@ body.light .subject-input {
             <canvas id="radarChart"></canvas>
           </div>
         </div>
+        <!-- 洞察與建議面板（策略 B & C）由 tab-behavior-radar.js 動態渲染 -->
+        <div id="radarInsightsPanel" style="display:none"></div>
         <!-- 分群說明 -->
         <div style="margin-top:16px;overflow-x:auto">
           <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
@@ -2941,10 +2943,11 @@ function updateSheetFilter() {
   const el = document.getElementById('aFilterSheet');
   // 保留使用者目前選擇（如果仍存在於新清單中）
   const prevVal = el.value;
-  el.innerHTML = sheets.map(s => `<option value="${s}">${s}</option>`).join('');
-  if (sheets.includes(prevVal)) el.value = prevVal;
+  el.innerHTML = `<option value="all">全部班級 All</option>` +
+    sheets.map(s => `<option value="${s}">${s}</option>`).join('');
+  if (prevVal === 'all' || sheets.includes(prevVal)) el.value = prevVal;
   // 回傳當前選中值（解決 innerHTML 重建後 .value 可能為空的時序問題）
-  return el.value || sheets[0] || '';
+  return el.value || 'all';
 }
 
 function cloneClassSummary(c) {
@@ -2987,13 +2990,13 @@ function aggregateClassSummaries(rows, sem, sheet, type = 'all') {
 }
 
 function getClassSummary(sem, sheet, type = 'all') {
-  const normSheet = normalizeSheet(sheet);
   const rows = Object.values(DATA.class_summary).filter(c =>
     (sem === 'all' || c.semester === sem) &&
-    c.sheet_name === normSheet &&
+    (sheet === 'all' || c.sheet_name === normalizeSheet(sheet)) &&
     (type === 'all' || c.type === type)
   );
   if (!rows.length) return null;
+  const normSheet = sheet === 'all' ? 'all' : normalizeSheet(sheet);
   return rows.length === 1 ? cloneClassSummary(rows[0]) : aggregateClassSummaries(rows, sem, normSheet, type);
 }
 
@@ -3134,10 +3137,18 @@ function renderA() {
     }
   });
 
-  renderTrend();
   renderNormalOverlay(cls, sem, sheet, type);
   renderRegression(sem, sheet, type);
   renderVarianceBar(sem, sheet);
+
+  // 全部班級模式：跨屆趨勢與跨屆比較無單一班級定義，以提示取代
+  const trendCard = document.getElementById('chartTrend')?.closest('.chart-card');
+  if (sheet === 'all') {
+    if (trendCard) trendCard.style.display = 'none';
+  } else {
+    if (trendCard) trendCard.style.display = '';
+    renderTrend();
+  }
 }
 
 function renderTrend() {
