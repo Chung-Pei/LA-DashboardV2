@@ -80,7 +80,7 @@ body.light {
   --blue:      #2e5ec8;
   --gray:      #6b748f;
   --green:     #1e9e78;
-  --card-bg2:  #f0f2f8;
+  --card-bg2:  #e8eaf2;
   --card-bg:   #ffffff;
 }
 
@@ -5359,21 +5359,24 @@ const BehaviorTabManager = (() => {
     document.querySelectorAll('.behavior-sub-pane').forEach(p => {
       p.style.display = p.id === `sub-${sub}` ? '' : 'none';
     });
+    let didInit = false;
     if (sub === 'correlation' && !_init.correlation) {
       try {
         await BehaviorCorrelationTab.init('corrHeatmap', 'scatterSection');
         _init.correlation = true;
-        attachInfoButtons();
-        attachChartExpandButtons();
+        didInit = true;
       } catch (e) { console.warn('correlation init failed', e); }
     }
     if (sub === 'time' && !_init.time) {
       try {
         await BehaviorTimeTab.init();
         _init.time = true;
-        attachInfoButtons();
-        attachChartExpandButtons();
+        didInit = true;
       } catch (e) { console.warn('time init failed', e); }
+    }
+    if (didInit) {
+      attachInfoButtons();
+      attachChartExpandButtons();
     }
   }
 
