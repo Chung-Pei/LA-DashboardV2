@@ -39,10 +39,8 @@ const BehaviorRadarTab = (() => {
   const INSIGHT_THRESHOLD = 0.05;   // 差距 ≥ 5% 才列入洞察
   const MIN_PASS_COUNT    = 10;     // 及格樣本數低於此值時 fallback 至全體基準
 
-  const DIM_NAMES_ZH = {
-    AUD:"AUD 聽覺教材", VID:"VID 影音教材", TXT:"TXT 文字教材",
-    SUP:"SUP 補充筆記", TUT:"TUT 輔導資源",  QUZ:"QUZ 題庫測驗",
-  };
+  // DIM_NAMES_ZH 已合併至 DIM_LABELS，直接複用
+  const DIM_NAMES_ZH = DIM_LABELS;
 
   // 各維度缺乏時的行動建議（弱點→建議文字）
   const RECOMMENDATION_MAP = {
@@ -57,6 +55,9 @@ const BehaviorRadarTab = (() => {
   let _radarChart=null,_radarData=null,_behaviorMeta={};
   let _behaviorStudents=[],_allStudents=[],_allSemesters=[];
   let _selectedSemester="all",_selectedCluster="P0",_passFilter="all",_semesterFilterNote=null;
+
+  // 模組層級：讀取深色模式，避免每次 render 重建 closure
+  function _isDark(){return document.documentElement.classList.contains('dark')||window.matchMedia('(prefers-color-scheme:dark)').matches;}
 
   function _dimensions(){
     const e=_radarData?.dimensions||_radarData?.meta?.dimensions;
@@ -311,8 +312,6 @@ const BehaviorRadarTab = (() => {
     const canvas=document.getElementById(canvasId);if(!canvas)return;
     canvas.style.display="";canvas.parentElement?.querySelector(".behavior-empty-message")?.remove();
     if(_radarChart){_radarChart.destroy();_radarChart=null;}
-    // 讀取目前是否為深色模式，動態決定線條顏色
-    const _isDark=()=>document.documentElement.classList.contains('dark')||window.matchMedia('(prefers-color-scheme:dark)').matches;
     const _gridColor=_isDark()?'rgba(180,185,210,0.20)':'rgba(0,0,0,0.08)';
     const _angleColor=_isDark()?'rgba(180,185,210,0.30)':'rgba(0,0,0,0.15)';
     const _labelColor=_isDark()?'rgba(190,195,220,0.85)':'rgba(60,65,90,0.85)';
@@ -394,11 +393,12 @@ const BehaviorRadarTab = (() => {
     el.innerHTML=`<div style="display:flex;flex-direction:row;gap:${isMobile?'6px':'10px'};align-items:stretch;overflow-x:auto;padding:4px 2px 8px">${totalCard}${cards}</div>`;
   }
 
-  function switchView(mode) {
+  function switchView(){
     _renderControls("radarControls");
     renderClusterSummary("clusterSummaryCards");
     _renderRadar("radarChart");
   }
+  // toggleCluster is an alias kept for external API compatibility
   function toggleCluster(key){selectCluster(key);}
 
   // ── 策略 B & C：洞察面板 ────────────────────────────────
