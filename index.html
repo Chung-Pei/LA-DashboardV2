@@ -27,7 +27,10 @@
      取得方式：curl -s https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js | openssl dgst -sha384 -binary | base64
      加上 integrity="sha384-HASH" 後可消除供應鏈風險。-->
 <script async src="https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<!-- WARN-3 修正：加入 SRI integrity hash，防止 CDN 供應鏈污染 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
+        integrity="sha384-rRoXxn2yHlrZYB587Ki9RO1tONhLdM6XfORg7Rw4uwH4/Fh/5nP7IUX91bkaKUgs"
+        crossorigin="anonymous"></script>
 <style>
 /* Embedded font fallbacks for offline/sandboxed use */
 
@@ -1143,7 +1146,7 @@ body.light .subject-input {
 
 <div class="tab-bar">
   <button class="tab active" onclick="switchTab('D')">
-    <span>整屆比較</span>
+    <span>跨屆比較</span>
     <span class="tab-label">Cohort Analysis</span>
   </button>
   <button class="tab" onclick="switchTab('A')">
@@ -2903,7 +2906,8 @@ function populateFilters() {
   const semsDesc = sortSemestersDesc(sems);
   // Panel A
   const aSem = document.getElementById('aFilterSem');
-  aSem.innerHTML = semsDesc.map(s => `<option value="${s}">${semLabel(s)}</option>`).join('');
+  aSem.innerHTML = `<option value="all">全學期 All</option>` +
+    semsDesc.map(s => `<option value="${s}">${semLabel(s)}</option>`).join('');
 
   // Trend
   const trendSheets = sortSheetNames([...new Set(
@@ -2923,7 +2927,7 @@ function updateSheetFilter() {
   const type = document.getElementById('aFilterType').value;
   const sheets = sortSheetNames(
     Object.values(DATA.class_summary)
-      .filter(c => c.semester === sem && (type === 'all' || c.type === type))
+      .filter(c => (sem === 'all' || c.semester === sem) && (type === 'all' || c.type === type))
       .map(c => c.sheet_name)
   );
 
@@ -2978,7 +2982,7 @@ function aggregateClassSummaries(rows, sem, sheet, type = 'all') {
 function getClassSummary(sem, sheet, type = 'all') {
   const normSheet = normalizeSheet(sheet);
   const rows = Object.values(DATA.class_summary).filter(c =>
-    c.semester === sem &&
+    (sem === 'all' || c.semester === sem) &&
     c.sheet_name === normSheet &&
     (type === 'all' || c.type === type)
   );
@@ -3005,6 +3009,11 @@ function availableCompareSems(sem, sheet, type = 'all') {
 function updateCompareFilter(sem, sheet, type = 'all') {
   const el = document.getElementById('aCompareSem');
   if (!el) return '';
+  if (sem === 'all') {
+    el.innerHTML = `<option value="auto">全學期模式下不適用</option>`;
+    el.value = 'auto';
+    return 'auto';
+  }
   const candidates = availableCompareSems(sem, sheet, type);
   const prev = el.value || 'auto';
   el.innerHTML = [
@@ -3272,7 +3281,7 @@ function initCPanel() {
   // 只在尚未有真實個案結果時才顯示 empty state
   const pw = document.getElementById('profileWrap');
   if (pw && !pw.querySelector('[data-student-profile]')) {
-    pw.innerHTML = '<div class="empty-state">請在上方搜尋學號以查看個案資料<br><span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--text-dim)">Search a student ID fragment above</span></div>';
+    pw.innerHTML = '<div class="empty-state" style="padding:12px 20px">請在上方搜尋學號以查看個案資料<br><span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--text-dim)">Search a student ID fragment above</span></div>';
   }
 }
 
@@ -4334,7 +4343,18 @@ function switchTab(tab) {
   if (tab === 'A') renderA();
   if (tab === 'C') { initCPanel(); }
   if (tab === 'D') renderD();
-  if (tab === 'L') BehaviorTabManager.lazyInit();
+  if (tab === 'L') {
+    BehaviorTabManager.lazyInit();
+    // 若已初始化（切換其他 tab 再切回），強制 resize 所有 behavior canvas
+    requestAnimationFrame(() => {
+      ['radarChart','weeklyQuizChart','preExamChart','timeSlotChart','hourlyLineChart','scatterChart'].forEach(id => {
+        const canvas = document.getElementById(id);
+        if (!canvas) return;
+        const inst = Chart.getChart(canvas);
+        if (inst) { inst.resize(); inst.update('none'); }
+      });
+    });
+  }
   if (tab === 'P') renderPrintPanel();
   requestAnimationFrame(() => {
     attachInfoButtons();
@@ -4401,7 +4421,7 @@ function classifyProgram(sheetName, semester) {
 }
 
 // ══════════════════════════════════════════════════════════
-// PANEL D — 整屆比較 Cohort Analysis
+// PANEL D — 跨屆比較 Cohort Analysis
 // ══════════════════════════════════════════════════════════
 function setDView(v) {
   dView = v;
@@ -5244,10 +5264,17 @@ function doPrint() {
         @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
       </style>
     </head><body>${html}<script>
+      // BUG-6 修正：等待所有圖表 img 載入完成後再列印，
+      // 避免 300ms 固定延遲在圖表量多或 lazy-init 未完成時列印空白
       window.onload = function() {
-        setTimeout(function() {
-          window.print();
-        }, 300);
+        var imgs = Array.from(document.images);
+        if (!imgs.length) { window.print(); return; }
+        var loaded = 0, total = imgs.length;
+        function tryPrint() { if (++loaded >= total) window.print(); }
+        imgs.forEach(function(img) {
+          if (img.complete) { tryPrint(); }
+          else { img.onload = img.onerror = tryPrint; }
+        });
       };
     <\/script></body></html>`);
     printWindow.document.close();
