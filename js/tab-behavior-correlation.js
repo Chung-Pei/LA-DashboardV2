@@ -8,25 +8,30 @@ const BehaviorCorrelationTab = (() => {
 
   // ── 欄位中文標籤 ─────────────────────────────────────────
   const FEAT_LABELS = {
-    aud_completion_rate:      "聽覺教材完成率",
-    aud_total_minutes:        "聽覺教材學習時間",
-    vid_completion_rate:      "影音教材完成率",
-    vid_total_minutes:        "影音教材學習時間",
-    txt_completion_rate:      "文字教材完成率",
-    txt_total_minutes:        "文字教材學習時間",
-    sup_completion_rate:      "補充筆記完成率",
-    sup_total_minutes:        "補充筆記學習時間",
-    tut_total_minutes:        "輔導資源時間",
-    quz_total_attempts:       "題庫作答次數",
-    quz_pass_rate:            "題庫通過率",
-    quz_coverage:             "題庫涵蓋率",
-    quz_late_cram:            "題庫考前集中度",
-    total_learning_minutes:   "總學習時間",
-    material_diversity_score: "教材多樣性",
-    consistency_score:        "學習穩定性",
-    early_start_ratio:        "提早學習比例",
-    cram_pattern_score:       "臨陣磨槍指數",
-    pre_exam_intensity:       "考前學習強度",
+    aud_completion_rate:          "聽覺教材完成率",
+    aud_total_minutes:            "聽覺教材學習時間",
+    vid_completion_rate:          "影音教材完成率",
+    vid_total_minutes:            "影音教材學習時間",
+    txt_completion_rate:          "文字教材完成率",
+    txt_total_minutes:            "文字教材學習時間",
+    sup_completion_rate:          "補充筆記完成率",
+    sup_total_minutes:            "補充筆記學習時間",
+    tut_total_minutes:            "輔導資源時間",
+    quz_total_attempts:           "題庫作答次數",
+    quz_pass_rate:                "題庫通過率",
+    quz_coverage:                 "題庫涵蓋率",
+    quz_late_cram:                "題庫考前集中度(3天)",
+    total_learning_minutes:       "總學習時間",
+    material_diversity_score:     "教材多樣性",
+    consistency_score:            "學習穩定性",
+    early_start_ratio:            "提早學習比例",
+    cram_pattern_score:           "臨陣磨槍指數",
+    pre_exam_intensity:           "考前學習強度",
+    // Ph2b 新增：題庫品質指標
+    quz_first_attempt_accuracy:   "首答正確率",
+    quz_final_accuracy:           "最終正確率",
+    quz_score_delta:              "成績進步幅度",
+    quz_cramming_ratio:           "考前7天刷題比",
   };
 
   const GRADE_LABELS = {
@@ -44,20 +49,40 @@ const BehaviorCorrelationTab = (() => {
 
   // ── 篩選狀態 ─────────────────────────────────────────────
   let _allScatterData   = null;   // 全量 scatter_data（篩選的基底）
-  let _behaviorByMasked = null;   // masked_id → behavior student（用於 join cluster）
-  let _behaviorByAnon   = null;   // anon_id → behavior student（masked_id 可能重複，優先使用 anon_id）
+  let _behaviorByMasked = null;   // masked_id → behavior student
+  let _behaviorByAnon   = null;   // anon_id → behavior student
   let _allSemesters     = [];     // 可用學期列表
-  let _filterSemester   = "all";  // 目前學期篩選
-  let _filterCluster    = "all";  // 目前分群篩選
-  let _filterPass       = "all";  // 目前及格/不及格篩選
-  let _corrType         = "pearson"; // "pearson" | "spearman"
+  let _allEduTypes      = [];     // Ph2b：可用學制列表（動態從資料取）
+  let _filterSemester   = "all";
+  let _filterCluster    = "all";
+  let _filterPass       = "all";
+  let _filterEduType    = "all";  // Ph2b：學制篩選
+  let _filterOutlier    = false;  // Ph2b：異常值排除開關
+  let _corrType         = "pearson";
 
-  function _targets() {
-    const explicit = _corrData?.targets || _corrData?.grades;
-    if (explicit?.length) return explicit;
-    const p = _corrData?.pearson || {};
-    const targetLike = Object.keys(p).filter(k => /score|grade|midterm|final/i.test(k));
-    return targetLike.length ? targetLike : Object.keys(p);
+  /**
+   * 讀取目前相關係數矩陣中的 r 值。
+   * Ph2b Breaking change：pearson 結構從純 float 改為 {r, p, significant}。
+   * 此函式統一解包，確保整個 module 取到的都是 number | null。
+   */
+  function _pearson(feat, target) {
+    const m = (_corrType === "spearman")
+      ? (_corrData?.spearman || _corrData?.pearson || {})
+      : (_corrData?.pearson || {});
+    const raw = m[feat]?.[target] ?? m[target]?.[feat] ?? null;
+    // 支援新格式 {r, p, significant} 與舊格式 number 並存
+    if (raw !== null && typeof raw === "object") return raw.r ?? null;
+    return raw;
+  }
+
+  /**
+   * Ph2b 新增：讀取 p-value（僅 Pearson 模式下有效）。
+   */
+  function _pearsonP(feat, target) {
+    const m = _corrData?.pearson || {};
+    const raw = m[feat]?.[target] ?? m[target]?.[feat] ?? null;
+    if (raw !== null && typeof raw === "object") return raw.p ?? null;
+    return null;
   }
 
   function _features() {
@@ -67,14 +92,6 @@ const BehaviorCorrelationTab = (() => {
     const fromTargetRows = targets.flatMap(target => Object.keys(p[target] || {}));
     if (fromTargetRows.length) return [...new Set(fromTargetRows)];
     return Object.keys(p);
-  }
-
-  function _pearson(feat, target) {
-    // Reads active matrix: spearman when _corrType==="spearman", else pearson
-    const m = (_corrType === "spearman")
-      ? (_corrData?.spearman || _corrData?.pearson || {})
-      : (_corrData?.pearson || {});
-    return m[feat]?.[target] ?? m[target]?.[feat] ?? null;
   }
 
   function _scatterRows(feat, target) {
@@ -101,7 +118,11 @@ const BehaviorCorrelationTab = (() => {
     const pearson = data?.pearson || {};
     const hasR = Object.values(pearson).some(row => {
       if (row && typeof row === "object") {
-        return Object.values(row).some(v => Number.isFinite(Number(v)));
+        return Object.values(row).some(v => {
+          // 相容新格式 {r, p, significant} 與舊格式 float
+          const rVal = (v && typeof v === "object") ? v.r : v;
+          return Number.isFinite(Number(rVal));
+        });
       }
       return Number.isFinite(Number(row));
     });
@@ -293,8 +314,9 @@ const BehaviorCorrelationTab = (() => {
             const behaviorRow = _behaviorByAnon.get(row.anon_id) || _behaviorByMasked.get(row.masked_id);
             return {
               ...row,
-              cluster: row.cluster || behaviorRow?.cluster || "",
-              semester: row.semester || behaviorRow?.semester || "",
+              cluster:  row.cluster  || behaviorRow?.cluster  || "",
+              semester: row.semester || behaviorRow?.semester  || "",
+              edu_type: row.edu_type || "",   // Ph2b：學制
             };
           })
         : raw;
@@ -304,11 +326,19 @@ const BehaviorCorrelationTab = (() => {
         ? _corrData.meta.semesters
         : (behaviorData?.meta?.semesters || []);
 
+      // Ph2b：動態收集可用學制（從 scatter_data.edu_type）
+      _allEduTypes = Array.isArray(_allScatterData)
+        ? [...new Set(_allScatterData.map(r => r.edu_type).filter(Boolean))]
+        : [];
+
       _filterSemester = "all";
       _filterCluster  = "all";
       _filterPass     = "all";
+      _filterEduType  = "all";
+      _filterOutlier  = false;
 
       _renderFilterBar(heatmapId);
+      _renderInsightsBadge(heatmapId);   // Ph2b：最高相關指標 badge
       _applyFiltersAndRender(heatmapId, scatterWrapperId);
     } catch (err) {
       BehaviorLoader.showError("tab-correlation", err.message);
@@ -362,6 +392,18 @@ const BehaviorCorrelationTab = (() => {
       `<option value="fail">不及格</option>`,
     ].join("");
 
+    // Ph2b：學制選單（依學制邏輯說明排序）
+    const EDU_TYPE_ORDER = ["二技一般","二技在職","二技夜間","四技一般","學士後護","重修班","重修生"];
+    const sortedEduTypes = [..._allEduTypes].sort(
+      (a, b) => (EDU_TYPE_ORDER.indexOf(a) + 1 || 99) - (EDU_TYPE_ORDER.indexOf(b) + 1 || 99)
+    );
+    const eduTypeOptions = [
+      `<option value="all">全部學制</option>`,
+      ...sortedEduTypes.map(t => `<option value="${t}">${t}</option>`),
+    ].join("");
+
+    const hasOutlierData = Object.keys(_corrData?.outlier_thresholds || {}).length > 0;
+
     const bar = document.createElement("div");
     bar.id = "corrFilterBar";
     bar.style.cssText = "display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)";
@@ -373,6 +415,14 @@ const BehaviorCorrelationTab = (() => {
                 style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
                 onchange="BehaviorCorrelationTab.onFilterChange()">
           ${semOptions}
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:5px">
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">學制</label>
+        <select id="corrEduTypeFilter"
+                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
+                onchange="BehaviorCorrelationTab.onFilterChange()">
+          ${eduTypeOptions}
         </select>
       </div>
       <div style="display:flex;align-items:center;gap:5px">
@@ -391,10 +441,20 @@ const BehaviorCorrelationTab = (() => {
           ${passOptions}
         </select>
       </div>
+      ${hasOutlierData ? `
+      <div style="display:flex;align-items:center;gap:5px">
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap;cursor:pointer" for="corrOutlierToggle">
+          <input type="checkbox" id="corrOutlierToggle"
+                 onchange="BehaviorCorrelationTab.onFilterChange()"
+                 style="margin-right:4px;cursor:pointer">
+          排除異常值
+        </label>
+      </div>` : ""}
       <span id="corrFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>
       <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px">
         <span style="font-size:.76rem;color:var(--text-dim,#888)">方法</span>
-        <button id="btnCorrPearson" onclick="BehaviorCorrelationTab.setCorrType('pearson')">Pearson <i>r</i></button><button id="btnCorrSpearman" onclick="BehaviorCorrelationTab.setCorrType('spearman')">Spearman <i>ρ</i></button>
+        <button id="btnCorrPearson"  onclick="BehaviorCorrelationTab.setCorrType('pearson')">Pearson <i>r</i></button>
+        <button id="btnCorrSpearman" onclick="BehaviorCorrelationTab.setCorrType('spearman')">Spearman <i>ρ</i></button>
       </span>`;
 
     anchor.parentNode.insertBefore(bar, anchor);
@@ -418,9 +478,11 @@ const BehaviorCorrelationTab = (() => {
   }
 
   function onFilterChange() {
-    _filterSemester = document.getElementById("corrSemFilter")?.value || "all";
-    _filterCluster  = document.getElementById("corrClusterFilter")?.value || "all";
-    _filterPass     = document.getElementById("corrPassFilter")?.value || "all";
+    _filterSemester = document.getElementById("corrSemFilter")?.value     || "all";
+    _filterCluster  = document.getElementById("corrClusterFilter")?.value  || "all";
+    _filterPass     = document.getElementById("corrPassFilter")?.value     || "all";
+    _filterEduType  = document.getElementById("corrEduTypeFilter")?.value  || "all";  // Ph2b
+    _filterOutlier  = document.getElementById("corrOutlierToggle")?.checked ?? false; // Ph2b
     _applyFiltersAndRender("corrHeatmap", "scatterSection");
   }
 
@@ -433,12 +495,15 @@ const BehaviorCorrelationTab = (() => {
   function _filteredScatterData() {
     const raw = _allScatterData;
     if (!Array.isArray(raw)) return raw;
+
+    // Ph2b：異常值閾值（來自 ETL 預算）
+    const thresholds = _corrData?.outlier_thresholds || {};
+
     return raw.filter(row => {
       if (_filterSemester !== "all") {
         const rowSem = String(row.semester || "").replace(/-/g,"");
         const selSem = String(_filterSemester).replace(/-/g,"");
         if (rowSem && rowSem !== selSem) return false;
-        // 若 scatter_data 本身無 semester，不過濾（data 是跨年彙總）
       }
       if (_filterCluster !== "all") {
         if ((row.cluster || "") !== _filterCluster) return false;
@@ -449,6 +514,18 @@ const BehaviorCorrelationTab = (() => {
         const passing = score >= PASS_THRESHOLD_CORR;
         if (_filterPass === "pass" && !passing) return false;
         if (_filterPass === "fail" && passing) return false;
+      }
+      // Ph2b：學制篩選
+      if (_filterEduType !== "all") {
+        if ((row.edu_type || "") !== _filterEduType) return false;
+      }
+      // Ph2b：異常值排除（IQR 法，使用 ETL 預算閾值）
+      if (_filterOutlier && Object.keys(thresholds).length) {
+        for (const [feat, bounds] of Object.entries(thresholds)) {
+          const val = _toNumber(row.features?.[feat]);
+          if (val === null) continue;
+          if (val < bounds.iqr_lower || val > bounds.iqr_upper) return false;
+        }
       }
       return true;
     });
@@ -521,10 +598,14 @@ const BehaviorCorrelationTab = (() => {
         if (r == null) return `<td class="text-center text-muted small">—</td>`;
         const bg        = _rToColor(r);
         const textColor = Math.abs(r) > 0.55 ? "#fff" : "var(--text,#dde3f5)";
+        // Ph2b：p-value 顯著性星號（僅 Pearson 模式）
+        const p = _corrType === "pearson" ? _pearsonP(feat, g) : null;
+        const sig = p !== null ? (p < 0.01 ? "**" : p < 0.05 ? "*" : "") : "";
+        const pTip = p !== null ? ` p=${p.toFixed(4)}` : "";
         return `<td class="text-center small" style="background:${bg};color:${textColor};cursor:pointer"
                     onclick="BehaviorCorrelationTab.showScatter('${feat}','${g}')"
-                    title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: ${corrSym}=${r}">
-                  ${corrSym}${r >= 0 ? "+" : ""}${r.toFixed(2)}
+                    title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: ${corrSym}=${r}${pTip}">
+                  ${corrSym}${r >= 0 ? "+" : ""}${r.toFixed(2)}${sig ? `<sup style="font-size:.65em;opacity:.9">${sig}</sup>` : ""}
                 </td>`;
       }).join("");
       return `<tr>
@@ -550,6 +631,7 @@ const BehaviorCorrelationTab = (() => {
         <span style="background:${_rToColor(0.6)};color:#fff;padding:1px 6px;border-radius:3px">強正相關</span>
         <span style="background:${_rToColor(-0.6)};color:#fff;padding:1px 6px;border-radius:3px;margin-left:4px">強負相關</span>
         <span style="background:${_rToColor(0)};color:var(--text,#dde3f5);padding:1px 6px;border-radius:3px;margin-left:4px">無相關</span>
+        ${!isSpearman ? `<span style="margin-left:8px;font-size:.78em;opacity:.75">* p&lt;0.05　** p&lt;0.01</span>` : ""}
       </p>`;
   }
 
@@ -560,6 +642,66 @@ const BehaviorCorrelationTab = (() => {
     return r >= 0
       ? `rgba(${70 - v}, ${130 + v}, 220, ${0.15 + abs * 0.75})`
       : `rgba(${200 + v}, 60, 60, ${0.15 + abs * 0.75})`;
+  }
+
+  /**
+   * Ph2b B6：最高相關指標 Badge + score_delta / cramming 洞察摘要。
+   * 插入於熱力圖容器上方；無 correlation_insights 資料時靜默不顯示。
+   */
+  function _renderInsightsBadge(insertBeforeId) {
+    const anchor = document.getElementById(insertBeforeId);
+    if (!anchor) return;
+
+    const existing = document.getElementById("corrInsightsBadge");
+    if (existing) existing.remove();
+
+    const ci = _corrData?.correlation_insights;
+    if (!ci) return;
+
+    const lines = [];
+
+    // 最高相關指標
+    const hr = ci.highest_r_feature;
+    if (hr?.feature && hr?.r != null) {
+      const featLabel   = FEAT_LABELS[hr.feature]   || hr.feature;
+      const targetLabel = GRADE_LABELS[hr.target]   || hr.target;
+      const rSign       = hr.r >= 0 ? "+" : "";
+      lines.push(
+        `🏆 <strong>最高相關指標</strong>：${featLabel} × ${targetLabel}　<code>r = ${rSign}${hr.r.toFixed(3)}</code>`
+      );
+    }
+
+    // score_delta 相關性
+    const sd = ci.score_delta_correlation;
+    if (sd?.final != null) {
+      const sign = sd.final >= 0 ? "+" : "";
+      lines.push(
+        `📈 <strong>成績進步幅度</strong> × 期末成績：<code>r = ${sign}${sd.final.toFixed(3)}</code>`
+      );
+    }
+
+    // cramming_ratio 相關性
+    const cr = ci.cramming_correlation;
+    if (cr?.final != null) {
+      const sign = cr.final >= 0 ? "+" : "";
+      lines.push(
+        `🕐 <strong>考前7天刷題比</strong> × 期末成績：<code>r = ${sign}${cr.final.toFixed(3)}</code>`
+      );
+    }
+
+    if (!lines.length) return;
+
+    const badge = document.createElement("div");
+    badge.id = "corrInsightsBadge";
+    badge.style.cssText = [
+      "display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px;padding:9px 13px",
+      "border:1px solid rgba(52,152,219,.25);border-radius:9px",
+      "background:rgba(52,152,219,.06);font-size:.8rem;line-height:1.6",
+      "color:var(--text-mid,#9aa0b8)",
+    ].join(";");
+    badge.innerHTML = lines.map(l => `<span>${l}</span>`).join("");
+
+    anchor.parentNode.insertBefore(badge, anchor);
   }
 
   // ── 散佈圖選擇器 ─────────────────────────────────────────
