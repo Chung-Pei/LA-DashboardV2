@@ -403,14 +403,22 @@ const BehaviorCorrelationTab = (() => {
       `<option value="fail">不及格</option>`,
     ].join("");
 
-    // Ph2b：學制選單（依學制邏輯說明排序）
-    const EDU_TYPE_ORDER = ["二技一般","二技在職","二技夜間","四技一般","學士後護","重修班","重修生"];
+    // F4 修正：edu_type 實際值為英文（theory/practicum），動態建立顯示名稱
+    // 不寫死中文順序，改為：有對應則顯示中文，無對應則直接顯示原始值
+    const EDU_TYPE_DISPLAY = {
+      "theory":    "正課",
+      "practicum": "實驗課",
+    };
+    // 排序：theory 優先，practicum 次之，其餘字母序
+    const EDU_TYPE_ORDER = ["theory", "practicum"];
     const sortedEduTypes = [..._allEduTypes].sort(
       (a, b) => (EDU_TYPE_ORDER.indexOf(a) + 1 || 99) - (EDU_TYPE_ORDER.indexOf(b) + 1 || 99)
     );
     const eduTypeOptions = [
-      `<option value="all">全部學制</option>`,
-      ...sortedEduTypes.map(t => `<option value="${t}">${t}</option>`),
+      `<option value="all">全部修課類型</option>`,
+      ...sortedEduTypes.map(t =>
+        `<option value="${t}">${EDU_TYPE_DISPLAY[t] || t}</option>`
+      ),
     ].join("");
 
     const hasOutlierData = Object.keys(_corrData?.outlier_thresholds || {}).length > 0;
@@ -429,7 +437,7 @@ const BehaviorCorrelationTab = (() => {
         </select>
       </div>
       <div style="display:flex;align-items:center;gap:5px">
-        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">學制</label>
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">修課類型</label>
         <select id="corrEduTypeFilter"
                 style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
                 onchange="BehaviorCorrelationTab.onFilterChange()">
@@ -611,7 +619,10 @@ const BehaviorCorrelationTab = (() => {
         // Ph2b：p-value 顯著性星號（僅 Pearson 模式）
         const p = _corrType === "pearson" ? _pearsonP(feat, g) : null;
         const sig = p !== null ? (p < 0.01 ? "**" : p < 0.05 ? "*" : "") : "";
-        const pTip = p !== null ? ` p=${p.toFixed(4)}` : "";
+        // F3 修正：p 極小值（截斷前為 0）顯示為 p<0.000001，而非 p=0.0000
+        const pTip = p !== null
+          ? (p < 1e-6 ? " p<0.000001" : ` p=${p.toFixed(4)}`)
+          : "";
         return `<td class="text-center small" style="background:${bg};color:${textColor};cursor:pointer"
                     onclick="BehaviorCorrelationTab.showScatter('${feat}','${g}')"
                     title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: ${corrSym}=${r}${pTip}">
