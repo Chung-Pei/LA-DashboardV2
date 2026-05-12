@@ -85,6 +85,17 @@ const BehaviorCorrelationTab = (() => {
     return null;
   }
 
+  function _targets() {
+    if (_corrData?.targets?.length) return _corrData.targets;
+    if (_corrData?.grades?.length)  return _corrData.grades;
+    const p = _corrData?.pearson || {};
+    const topKeys = Object.keys(p);
+    // 如果頂層 key 是 grade 名稱（新格式 target→feat），直接回傳
+    const gradeKeys = topKeys.filter(k => k in GRADE_LABELS);
+    if (gradeKeys.length) return gradeKeys;
+    return ["midterm_score", "final_score", "semester_score"];
+  }
+
   function _features() {
     if (_corrData?.features?.length) return _corrData.features;
     const p = _corrData?.pearson || {};
@@ -578,7 +589,6 @@ const BehaviorCorrelationTab = (() => {
     const matrix = isSpearman
       ? (_corrData.spearman || _corrData.pearson || {})
       : (_corrData.pearson || {});
-    const pearson = matrix; // alias for _pearson() helper
     const corrSym = isSpearman ? "ρ" : "r";
 
     if (!features.length || !grades.length) {
