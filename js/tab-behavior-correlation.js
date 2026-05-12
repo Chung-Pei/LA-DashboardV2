@@ -172,6 +172,7 @@ const BehaviorCorrelationTab = (() => {
             _toNumber(rec.semester_score) === null) return;
         rows.push({
           source_id: sourceId,
+          anon_id:   String(info?.anon_id || ""),
           masked_id: info?.name_masked || sourceId,
           semester: String(rec.semester || ""),
           midterm_score: _toNumber(rec.midterm),
@@ -554,7 +555,6 @@ const BehaviorCorrelationTab = (() => {
     const filtered = _filteredScatterData();
     const count = Array.isArray(filtered) ? filtered.length : "—";
 
-    // 更新人數標示
     const countEl = document.getElementById("corrFilterCount");
     const semHasSemesterField = Array.isArray(_allScatterData) &&
       _allScatterData.some(r => r.semester);
@@ -563,7 +563,6 @@ const BehaviorCorrelationTab = (() => {
       : "";
     if (countEl) countEl.textContent = `共 ${count} 筆${semNote}`;
 
-    // 用篩選後資料重建 pearson
     const features = _features();
     const targets  = _targets();
     if (Array.isArray(filtered) && filtered.length >= 5) {
@@ -577,12 +576,107 @@ const BehaviorCorrelationTab = (() => {
       });
       _corrData = { ..._corrData, pearson, spearman, scatter_data: filtered };
     } else {
-      // 人數不足：保留既有矩陣（不重算），只更新 scatter_data
       _corrData = { ..._corrData, scatter_data: filtered };
     }
 
     _renderHeatmap(heatmapId);
     _renderScatterSelector(scatterWrapperId);
+    _renderLaggedSection(scatterWrapperId);   // C3：滯後相關性區塊
+  }
+
+  /**
+   * C3：時間滯後相關性摘要表。
+   * 讀取 _corrData.lagged_pearson（ETL 產出），插入於散佈圖容器下方。
+   * 無資料時靜默不顯示。
+   */
+  function _renderLaggedSection(afterId) {
+    const anchor = document.getElementById(afterId);
+    if (!anchor) return;
+
+    const existing = document.getElementById("corrLaggedSection");
+    if (existing) existing.remove();
+
+    const lagged = _corrData?.lagged_pearson;
+    if (!lagged?.results || !Object.keys(lagged.results).length) return;
+
+    const { front_target, back_target, results } = lagged;
+    const frontLabel = GRADE_LABELS[front_target] || front_target;
+    const backLabel  = GRADE_LABELS[back_target]  || back_target;
+
+    // 只顯示 front 或 back 有顯著相關（|r|≥0.1）的特徵，依 |lag_delta| 降序
+    const rows = Object.entries(results)
+      .filter(([, v]) => {
+        const fr = v.front?.r, br = v.back?.r;
+        return (fr != null && Math.abs(fr) >= 0.1) || (br != null && Math.abs(br) >= 0.1);
+      })
+      .sort(([, a], [, b]) => Math.abs(b.lag_delta ?? 0) - Math.abs(a.lag_delta ?? 0));
+
+    if (!rows.length) return;
+
+    const _rCell = (stat) => {
+      if (!stat || stat.r == null) return `<td class="text-center text-muted small">—</td>`;
+      const r   = stat.r;
+      const bg  = _rToColor(r);
+      const tc  = Math.abs(r) > 0.45 ? "#fff" : "var(--text,#dde3f5)";
+      const sig = stat.significant ? "*" : "";
+      return `<td class="text-center small"
+                  style="background:${bg};color:${tc}"
+                  title="r=${r >= 0 ? "+" : ""}${r.toFixed(3)} p=${stat.p < 1e-6 ? "<0.000001" : stat.p?.toFixed(4)}">
+                ${r >= 0 ? "+" : ""}${r.toFixed(2)}${sig}
+              </td>`;
+    };
+
+    const _deltaCell = (delta) => {
+      if (delta == null) return `<td class="text-center text-muted small">—</td>`;
+      const color = delta > 0.05
+        ? "rgba(39,174,96,0.85)"
+        : delta < -0.05
+          ? "rgba(192,57,43,0.85)"
+          : "var(--text-mid,#9aa0b8)";
+      const arrow = delta > 0.02 ? "▲" : delta < -0.02 ? "▼" : "≈";
+      return `<td class="text-center small fw-bold" style="color:${color}">
+                ${arrow} ${delta >= 0 ? "+" : ""}${delta.toFixed(3)}
+              </td>`;
+    };
+
+    const tableRows = rows.map(([feat, v]) => `
+      <tr>
+        <td class="small text-nowrap pe-2">${FEAT_LABELS[feat] || feat}</td>
+        ${_rCell(v.front)}
+        ${_rCell(v.back)}
+        ${_deltaCell(v.lag_delta)}
+      </tr>`).join("");
+
+    const section = document.createElement("div");
+    section.id = "corrLaggedSection";
+    section.style.cssText = "margin-top:20px";
+    section.innerHTML = `
+      <h6 class="fw-semibold mb-1" style="font-size:.88rem">
+        ⏱ 時間滯後相關性
+        <span style="font-size:.75rem;font-weight:400;color:var(--text-dim,#888);margin-left:6px">
+          行為指標 vs 前段（${frontLabel}）/ 後段（${backLabel}）
+        </span>
+      </h6>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-1" style="font-size:.83rem">
+          <thead>
+            <tr>
+              <th class="text-muted fw-normal">學習行為指標</th>
+              <th class="text-center fw-normal small" style="min-width:80px">${frontLabel}</th>
+              <th class="text-center fw-normal small" style="min-width:80px">${backLabel}</th>
+              <th class="text-center fw-normal small" title="後段r − 前段r，正值代表行為對後期預測力更強"
+                  style="min-width:80px">Δ 預測增量</th>
+            </tr>
+          </thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+      <p class="text-muted small mb-0">
+        ▲ 正增量：行為對後段成績的預測力高於前段，學習效益延續。
+        * p&lt;0.05。色彩同熱力圖。
+      </p>`;
+
+    anchor.parentNode.insertBefore(section, anchor.nextSibling);
   }
 
   // ── Pearson 熱力圖（HTML table + 色彩映射）────────────────
@@ -770,6 +864,24 @@ const BehaviorCorrelationTab = (() => {
     return Math.round((below / sortedArr.length) * 100);
   }
 
+  /** 最小二乘法線性回歸，回傳 {slope, intercept, xMin, xMax, yAtMin, yAtMax} 或 null */
+  function _calcRegression(points) {
+    const n = points.length;
+    if (n < 30) return null;   // 資料點不足，不畫迴歸線
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    for (const p of points) { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumX2 += p.x * p.x; }
+    const denom = n * sumX2 - sumX * sumX;
+    if (Math.abs(denom) < 1e-10) return null;
+    const slope     = (n * sumXY - sumX * sumY) / denom;
+    const intercept = (sumY - slope * sumX) / n;
+    const xs        = points.map(p => p.x);
+    const xMin      = Math.min(...xs);
+    const xMax      = Math.max(...xs);
+    return { slope, intercept, xMin, xMax,
+             yAtMin: slope * xMin + intercept,
+             yAtMax: slope * xMax + intercept };
+  }
+
   function showScatter(feat, gradeCol) {
     if (!_corrData) return;
     _currentTarget = { feat, gradeCol };
@@ -781,7 +893,6 @@ const BehaviorCorrelationTab = (() => {
     const points  = raw.map(d => ({ x: d.x, y: d.y, masked: d.masked_id }));
     if (!points.length) return;
 
-    // 預計算百分位排序陣列（提升到 render 時，避免每次 hover 重複運算）
     const sortedX = [...points.map(p => p.x)].sort((a, b) => a - b);
     const sortedY = [...points.map(p => p.y)].sort((a, b) => a - b);
 
@@ -790,38 +901,52 @@ const BehaviorCorrelationTab = (() => {
     const canvas = document.getElementById("scatterChart");
     if (!canvas) return;
 
-    // BUG-2 修正：在 chart 建立前預先計算 Spearman ρ，避免每次 hover 重複 O(n) 運算
     const rho = _spearmanValue(
       raw.map(d => ({ features: { [feat]: d.x }, [gradeCol]: d.y })),
       feat, gradeCol
     );
-    // BUG-2 修正：相關係數標籤依 _corrType 動態切換（非永遠顯示 Pearson r）
     const corrLabelInFooter = _corrType === "spearman"
       ? (rho  != null ? `📊 Spearman ρ = ${rho  >= 0 ? "+" : ""}${rho.toFixed(3)}` : null)
       : (r    != null ? `📈 Pearson  r = ${r    >= 0 ? "+" : ""}${r.toFixed(3)}`  : null);
+
+    // C1：計算 OLS 迴歸線（n≥30 才畫，否則靜默略過）
+    const reg = _calcRegression(points);
+    const datasets = [{
+      label: `${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[gradeCol] || gradeCol}${rLabel}`,
+      data: points,
+      backgroundColor: "rgba(52, 152, 219, 0.55)",
+      pointRadius: 5,
+      pointHoverRadius: 7,
+    }];
+    if (reg) {
+      datasets.push({
+        label: `趨勢線 (y = ${reg.slope >= 0 ? "+" : ""}${reg.slope.toFixed(2)}x + ${reg.intercept.toFixed(1)})`,
+        data: [
+          { x: reg.xMin, y: Math.max(0, Math.min(100, reg.yAtMin)) },
+          { x: reg.xMax, y: Math.max(0, Math.min(100, reg.yAtMax)) },
+        ],
+        type: "line",
+        borderColor: "rgba(231, 76, 60, 0.75)",
+        borderWidth: 2,
+        borderDash: [6, 3],
+        pointRadius: 0,
+        fill: false,
+        tension: 0,
+      });
+    }
 
     if (_scatterChart) { _scatterChart.destroy(); _scatterChart = null; }
 
     _scatterChart = new Chart(canvas.getContext("2d"), {
       type: "scatter",
-      data: {
-        datasets: [{
-          label: `${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[gradeCol] || gradeCol}${rLabel}`,
-          data: points,
-          backgroundColor: "rgba(52, 152, 219, 0.55)",
-          pointRadius: 5,
-          pointHoverRadius: 7,
-        }],
-      },
+      data: { datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
           x: {
             title: { display: true, text: FEAT_LABELS[feat] || feat, font: { size: 11 } },
-            ticks: {
-              callback: v => isRateField ? `${Math.round(v * 100)}%` : v,
-            },
+            ticks: { callback: v => isRateField ? `${Math.round(v * 100)}%` : v },
           },
           y: {
             title: { display: true, text: GRADE_LABELS[gradeCol] || gradeCol, font: { size: 11 } },
@@ -831,6 +956,7 @@ const BehaviorCorrelationTab = (() => {
         plugins: {
           legend: { labels: { font: { size: 11 } } },
           tooltip: {
+            filter: item => item.datasetIndex === 0,   // 迴歸線不觸發 tooltip
             callbacks: {
               title: ctx => ctx.length ? `學生 ${ctx[0].raw.masked}` : "",
               label: ctx => {
@@ -853,7 +979,6 @@ const BehaviorCorrelationTab = (() => {
               footer: ctx => {
                 if (!ctx.length) return [];
                 const lines = [];
-                // BUG-2 修正：使用提升到 render 時預算的值（不再每次 hover 重算）
                 if (r != null) {
                   const st = Math.abs(r) >= 0.5 ? "強" : Math.abs(r) >= 0.3 ? "中等" : "弱";
                   lines.push(`📈 Pearson r = ${r >= 0 ? "+" : ""}${r.toFixed(3)}  → ${st}${r >= 0 ? "正" : "負"}相關`);
@@ -861,6 +986,9 @@ const BehaviorCorrelationTab = (() => {
                 if (rho != null) {
                   const ss = Math.abs(rho) >= 0.5 ? "強" : Math.abs(rho) >= 0.3 ? "中等" : "弱";
                   lines.push(`📊 Spearman ρ = ${rho >= 0 ? "+" : ""}${rho.toFixed(3)}  → ${ss}${rho >= 0 ? "正" : "負"}相關`);
+                }
+                if (reg) {
+                  lines.push(`📉 趨勢線：斜率 ${reg.slope >= 0 ? "+" : ""}${reg.slope.toFixed(3)}`);
                 }
                 return lines;
               },
