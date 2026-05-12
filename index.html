@@ -240,6 +240,42 @@ select option {
 }
 .filter-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
 
+/* ── Mobile: label + control on one row ── */
+.filter-pair {
+  display: contents; /* transparent in flex, items appear as direct children */
+}
+@media (max-width: 600px) {
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .filter-pair {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+  }
+  .filter-pair .filter-label {
+    flex-shrink: 0;
+    min-width: 80px;
+  }
+  .filter-pair select,
+  .filter-pair input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+  .filter-pair .mode-toggle,
+  .filter-pair .view-toggle,
+  .filter-pair .search-wrap {
+    flex: 1;
+    min-width: 0;
+  }
+  .filter-sep { display: none; }
+}
+
 /* ── STAT CARDS ── */
 .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .stat-card {
@@ -1169,30 +1205,38 @@ body.light .subject-input {
 <!-- ══ PANEL A ══ -->
 <div class="panel" id="panelA">
   <div class="filter-bar">
-    <span class="filter-label">學期 Semester</span>
-    <select id="aFilterSem" onchange="updateSheetFilter(); renderA()"></select>
+    <div class="filter-pair">
+      <span class="filter-label">學期 Semester</span>
+      <select id="aFilterSem" onchange="updateSheetFilter(); renderA()"></select>
+    </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">學制 Program</span>
-    <select id="aFilterProgram" onchange="updateSheetFilter(); renderA()">
-      <option value="all">全部學制</option>
-      <option value="2yr_gen">二技一般</option>
-      <option value="2yr_work">二技在職</option>
-      <option value="2yr_night">二技夜間</option>
-      <option value="4yr">四技一般</option>
-      <option value="post">學士後護</option>
-      <option value="retake_class">重修班</option>
-      <option value="retake_student">重修生</option>
-    </select>
+    <div class="filter-pair">
+      <span class="filter-label">學制 Program</span>
+      <select id="aFilterProgram" onchange="updateSheetFilter(); renderA()">
+        <option value="all">全部學制</option>
+        <option value="2yr_gen">二技一般</option>
+        <option value="2yr_work">二技在職</option>
+        <option value="2yr_night">二技夜間</option>
+        <option value="4yr">四技一般</option>
+        <option value="post">學士後護</option>
+        <option value="retake_class">重修班</option>
+        <option value="retake_student">重修生</option>
+      </select>
+    </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">班級 Class</span>
-    <select id="aFilterSheet" onchange="renderA()"></select>
+    <div class="filter-pair">
+      <span class="filter-label">班級 Class</span>
+      <select id="aFilterSheet" onchange="renderA()"></select>
+    </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">類型 Type</span>
-    <select id="aFilterType" onchange="updateSheetFilter(); renderA()">
-      <option value="all">全部 All</option>
-      <option value="theory">正課 Theory</option>
-      <option value="practicum">實驗 Practicum</option>
-    </select>
+    <div class="filter-pair">
+      <span class="filter-label">類型 Type</span>
+      <select id="aFilterType" onchange="updateSheetFilter(); renderA()">
+        <option value="all">全部 All</option>
+        <option value="theory">正課 Theory</option>
+        <option value="practicum">實驗 Practicum</option>
+      </select>
+    </div>
   </div>
 
   <div class="stat-row" id="aStats"></div>
@@ -1281,35 +1325,43 @@ body.light .subject-input {
 
   <!-- ── 第一層：常駐搜尋列 ── -->
   <div class="filter-bar" style="flex-wrap:wrap;gap:10px 16px">
-    <span class="filter-label">搜尋學號 Search ID</span>
-    <div class="search-wrap">
-      <span class="search-icon">🔍</span>
-      <input type="text" id="cSearch" placeholder="輸入學號片段（如 1211、****01）" oninput="searchStudent()" autocomplete="off">
-      <div class="search-results" id="searchResults"></div>
+    <div class="filter-pair">
+      <span class="filter-label">搜尋學號 Search ID</span>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="cSearch" placeholder="輸入學號片段（如 1211、****01）" oninput="searchStudent()" autocomplete="off">
+        <div class="search-results" id="searchResults"></div>
+      </div>
     </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">學年度 Year</span>
-    <select id="cFilterYear" onchange="renderCView()">
-      <option value="all">全部學年</option>
-    </select>
+    <div class="filter-pair">
+      <span class="filter-label">學年度 Year</span>
+      <select id="cFilterYear" onchange="renderCView()">
+        <option value="all">全部學年</option>
+      </select>
+    </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">學制 Program</span>
-    <select id="cFilterProgram" onchange="renderCView()">
-      <option value="all">全部學制</option>
-      <option value="2yr_gen">二技一般</option>
-      <option value="2yr_work">二技在職</option>
-      <option value="2yr_night">二技夜間</option>
-      <option value="4yr">四技一般</option>
-      <option value="post">學士後護</option>
-      <option value="retake_class">重修班</option>
-      <option value="retake_student">重修生</option>
-    </select>
+    <div class="filter-pair">
+      <span class="filter-label">學制 Program</span>
+      <select id="cFilterProgram" onchange="renderCView()">
+        <option value="all">全部學制</option>
+        <option value="2yr_gen">二技一般</option>
+        <option value="2yr_work">二技在職</option>
+        <option value="2yr_night">二技夜間</option>
+        <option value="4yr">四技一般</option>
+        <option value="post">學士後護</option>
+        <option value="retake_class">重修班</option>
+        <option value="retake_student">重修生</option>
+      </select>
+    </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">評量 Exam</span>
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="cExamSem" onclick="setCExam('semester_score')">學期</button>
-      <button class="mode-btn" id="cExamMid" onclick="setCExam('midterm')">期中</button>
-      <button class="mode-btn" id="cExamFin" onclick="setCExam('final')">期末</button>
+    <div class="filter-pair">
+      <span class="filter-label">評量 Exam</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="cExamSem" onclick="setCExam('semester_score')">學期</button>
+        <button class="mode-btn" id="cExamMid" onclick="setCExam('midterm')">期中</button>
+        <button class="mode-btn" id="cExamFin" onclick="setCExam('final')">期末</button>
+      </div>
     </div>
     <span id="cSearchHint" style="margin-left:auto;font-size:11px;color:var(--text-dim);white-space:nowrap">請輸入學號片段以查看個案資料 <span style="font-family:'JetBrains Mono',monospace;font-size:10px">Search a student ID fragment above</span></span>
   </div>
@@ -1455,35 +1507,43 @@ body.light .subject-input {
 <!-- ══ PANEL D ══ -->
 <div class="panel active" id="panelD">
   <div class="filter-bar">
-    <span class="filter-label">學制 Program</span>
-    <select id="dFilterProgram" onchange="renderD()">
-      <option value="all">全部學制 All</option>
-      <option value="2yr_gen">二技一般班</option>
-      <option value="2yr_work">二技在職</option>
-      <option value="2yr_night">二技夜間</option>
-      <option value="4yr">四技一般</option>
-      <option value="post">學士後護</option>
-      <option value="retake_class">重修班</option>
-      <option value="retake_student">重修生</option>
-    </select>
-    <div class="filter-sep"></div>
-    <span class="filter-label">課程類型 Type</span>
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="dTypeTheory" onclick="setDType('theory')">正課</button>
-      <button class="mode-btn" id="dTypePracticum" onclick="setDType('practicum')">實驗課</button>
+    <div class="filter-pair">
+      <span class="filter-label">學制 Program</span>
+      <select id="dFilterProgram" onchange="renderD()">
+        <option value="all">全部學制 All</option>
+        <option value="2yr_gen">二技一般班</option>
+        <option value="2yr_work">二技在職</option>
+        <option value="2yr_night">二技夜間</option>
+        <option value="4yr">四技一般</option>
+        <option value="post">學士後護</option>
+        <option value="retake_class">重修班</option>
+        <option value="retake_student">重修生</option>
+      </select>
     </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">顯示模式 View</span>
-    <div class="view-toggle">
-      <button class="view-btn active" id="dViewMerge" onclick="setDView('merge')">合併總平均</button>
-      <button class="view-btn" id="dViewClass" onclick="setDView('class')">各班獨立</button>
+    <div class="filter-pair">
+      <span class="filter-label">課程類型 Type</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="dTypeTheory" onclick="setDType('theory')">正課</button>
+        <button class="mode-btn" id="dTypePracticum" onclick="setDType('practicum')">實驗課</button>
+      </div>
     </div>
     <div class="filter-sep"></div>
-    <span class="filter-label">指標 Metric</span>
-    <div class="mode-toggle">
-      <button class="mode-btn active" id="dMetricSem" onclick="setDMetric('semester_score')">學期</button>
-      <button class="mode-btn" id="dMetricMid" onclick="setDMetric('midterm')">期中</button>
-      <button class="mode-btn" id="dMetricFin" onclick="setDMetric('final')">期末</button>
+    <div class="filter-pair">
+      <span class="filter-label">顯示模式 View</span>
+      <div class="view-toggle">
+        <button class="view-btn active" id="dViewMerge" onclick="setDView('merge')">合併總平均</button>
+        <button class="view-btn" id="dViewClass" onclick="setDView('class')">各班獨立</button>
+      </div>
+    </div>
+    <div class="filter-sep"></div>
+    <div class="filter-pair">
+      <span class="filter-label">指標 Metric</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="dMetricSem" onclick="setDMetric('semester_score')">學期</button>
+        <button class="mode-btn" id="dMetricMid" onclick="setDMetric('midterm')">期中</button>
+        <button class="mode-btn" id="dMetricFin" onclick="setDMetric('final')">期末</button>
+      </div>
     </div>
   </div>
 
