@@ -1170,13 +1170,25 @@ body.light .subject-input {
 <div class="panel" id="panelA">
   <div class="filter-bar">
     <span class="filter-label">學期 Semester</span>
-    <select id="aFilterSem" onchange="renderA()"></select>
+    <select id="aFilterSem" onchange="updateSheetFilter(); renderA()"></select>
+    <div class="filter-sep"></div>
+    <span class="filter-label">學制 Program</span>
+    <select id="aFilterProgram" onchange="updateSheetFilter(); renderA()">
+      <option value="all">全部學制</option>
+      <option value="2yr_gen">二技一般</option>
+      <option value="2yr_work">二技在職</option>
+      <option value="2yr_night">二技夜間</option>
+      <option value="4yr">四技一般</option>
+      <option value="post">學士後護</option>
+      <option value="retake_class">重修班</option>
+      <option value="retake_student">重修生</option>
+    </select>
     <div class="filter-sep"></div>
     <span class="filter-label">班級 Class</span>
     <select id="aFilterSheet" onchange="renderA()"></select>
     <div class="filter-sep"></div>
     <span class="filter-label">類型 Type</span>
-    <select id="aFilterType" onchange="renderA()">
+    <select id="aFilterType" onchange="updateSheetFilter(); renderA()">
       <option value="all">全部 All</option>
       <option value="theory">正課 Theory</option>
       <option value="practicum">實驗 Practicum</option>
@@ -2934,9 +2946,14 @@ function populateFilters() {
 function updateSheetFilter() {
   const sem  = document.getElementById('aFilterSem').value;
   const type = document.getElementById('aFilterType').value;
+  const prog = (document.getElementById('aFilterProgram') || {}).value || 'all';
   const sheets = sortSheetNames(
     Object.values(DATA.class_summary)
-      .filter(c => (sem === 'all' || c.semester === sem) && (type === 'all' || c.type === type))
+      .filter(c =>
+        (sem === 'all' || c.semester === sem) &&
+        (type === 'all' || c.type === type) &&
+        (prog === 'all' || classInfo(c.sheet_name, c.semester).program === prog)
+      )
       .map(c => c.sheet_name)
   );
 
@@ -5129,7 +5146,7 @@ function withPrintDataRange(task) {
   const sems = getPrintSemesters();
   if (!sems.length) return task();
   const originalData = DATA;
-  const controls = ['aFilterSem', 'aFilterSheet', 'aTrendSheet', 'aCompareSem'].map(id => {
+  const controls = ['aFilterSem', 'aFilterProgram', 'aFilterSheet', 'aTrendSheet', 'aCompareSem'].map(id => {
     const el = document.getElementById(id);
     return { el, value: el?.value };
   });
