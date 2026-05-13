@@ -75,7 +75,6 @@ const BehaviorTimeTab = (() => {
   // ── 狀態 ────────────────────────────────────────────────────
   let _quizData     = null;
   let _timeData     = null;
-  let _behaviorData = null;
   let _charts       = {};
   let _filterSemester = "all";
   let _filterCluster  = "all";
@@ -125,17 +124,11 @@ const BehaviorTimeTab = (() => {
 
   function _availableSemesters() {
     const fromMeta = [
-      ...(_behaviorData?.meta?.semesters || []),
-      ...(_timeData?.meta?.semesters    || []),
-      ...(_quizData?.meta?.semesters    || []),
+      ...(_timeData?.meta?.semesters  || []),
+      ...(_quizData?.meta?.semesters  || []),
     ];
-    const lmsSrc = [
-      ...(_behaviorData?.students || []),
-      ...(_timeData?.students     || []),
-      ...(_quizData?.students     || []),
-    ];
-    const fromLmsRows = lmsSrc.map(s => s.semester).filter(Boolean);
-    return [...new Set([...fromMeta, ...fromLmsRows])].sort((a, b) => String(b).localeCompare(String(a)));
+    const fromRows = (_timeData?.students || []).map(s => s.semester).filter(Boolean);
+    return [...new Set([...fromMeta, ...fromRows])].sort((a, b) => String(b).localeCompare(String(a)));
   }
 
   // ── 熱力圖色彩函式（模組層級，OPT-3）────────────────────────
@@ -154,12 +147,14 @@ const BehaviorTimeTab = (() => {
   async function init() {
     BehaviorLoader.setLoading("tab-time", true);
     try {
-      [_quizData, _timeData, _behaviorData] = await Promise.all([
+      [_quizData, _timeData] = await Promise.all([
         BehaviorLoader.load.quiz(),
         BehaviorLoader.load.time(),
-        BehaviorLoader.load.behavior().catch(() => null),
       ]);
       _allSemesters = _availableSemesters();
+      // 全量 rows 在 init 時建立一次，篩選時只做 filter，不再重建 join
+      _rowCache = { all: _studentRows(false), filtered: null };
+      _rowCache.filtered = _filterRows(_rowCache.all);
       _renderFilterBar();
       _renderAll();
     } catch (err) {
@@ -216,61 +211,37 @@ const BehaviorTimeTab = (() => {
     _renderAll();
   }
 
-  // ── 資料列處理（原有邏輯，保留不動）────────────────────────────
-
-  function _mainGradeRows() {
-    const mainData = typeof DATA !== "undefined" ? DATA : window.DATA;
-    const students = mainData?.students || {};
-    const rows = [];
-    Object.entries(students).forEach(([sourceId, info]) => {
-      (info?.records || []).forEach(rec => {
-        rows.push({
-          source_id: sourceId,
-          masked_id: info?.name_masked || sourceId,
-          semester: String(rec.semester || ""),
-          final_score: rec.final,
-          semester_score: rec.semester_score,
-        });
-      });
-    });
-    return rows;
-  }
+  // ── 資料列處理 ──────────────────────────────────────────────
+  // time_distribution.json v2.1 已含 edu_type / cluster / semester / final_score，
+  // 直接以 timeData.students 為主，不再 join window.DATA
 
   function _studentRows(applyFilters = true) {
-    const timeByAnon   = new Map((_timeData?.students || []).map(s => [s.anon_id,   s]));
-    const timeByMasked = new Map((_timeData?.students || []).map(s => [s.masked_id, s]));
-    const source = (_behaviorData?.students?.length ? _behaviorData.students : _timeData?.students) || [];
-    const byMasked = new Map(source.map(s => [s.masked_id, s]));
-    const gradeRows = _mainGradeRows();
-    const rowSource = gradeRows.length
-      ? gradeRows.map(g => ({ ...(byMasked.get(g.masked_id) || {}), ...g }))
-      : source;
-    const rows = rowSource.map(s => {
-      const timeRow = timeByAnon.get(s.anon_id) || timeByMasked.get(s.masked_id) || {};
-      const features = s.features || {};
-      const profile  = s.time_profile || {};
+    const timeStudents = _timeData?.students || [];
+    const rows = timeStudents.map(s => {
+      const tp = s.time_profile || {};
       return {
-        anon_id:             s.anon_id || timeRow.anon_id,
-        masked_id:           s.masked_id || timeRow.masked_id,
-        semester:            s.semester || timeRow.semester || "",
-        cluster:             s.cluster  || timeRow.cluster  || "",
-        final_score:         s.final_score    ?? timeRow.final_score,
-        semester_score:      s.semester_score ?? timeRow.semester_score,
-        totalMinutes:        _num(features.total_learning_minutes ?? timeRow.total_learning_minutes),
-        preMidterm:          _num(profile.pre_midterm_7d_minutes ?? timeRow.pre_midterm_7d_minutes),
-        preFinal:            _num(profile.pre_final_7d_minutes   ?? timeRow.pre_final_7d_minutes),
-        midRegular:          _num(profile.midterm_regular_minutes ?? timeRow.midterm_regular_minutes),
-        finalRegular:        _num(profile.final_regular_minutes   ?? timeRow.final_regular_minutes),
-        midPeriod:           _num(profile.midterm_period_minutes  ?? timeRow.midterm_period_minutes),
-        finalPeriod:         _num(profile.final_period_minutes    ?? timeRow.final_period_minutes),
-        activeWeeks:         _num(profile.active_weeks  ?? timeRow.active_weeks),
-        timeSlotDistribution: profile.time_slot_distribution || timeRow.time_slot_distribution || {},
-        // ── v2.1 新欄位 ──
-        heatmapRaw:          timeRow.heatmap_matrix?.raw        || {},
-        heatmapNorm:         timeRow.heatmap_matrix?.normalized || {},
-        hourlyRaw:           timeRow.hourly_distribution?.raw        || [],
-        hourlyNorm:          timeRow.hourly_distribution?.normalized || [],
-        late_night_ratio:    _num(profile.late_night_ratio ?? timeRow.late_night_ratio),
+        anon_id:             s.anon_id,
+        masked_id:           s.masked_id,
+        semester:            s.semester  || "",
+        cluster:             s.cluster   || "",
+        edu_type:            s.edu_type  || "",
+        final_score:         s.final_score    ?? null,
+        semester_score:      s.semester_score ?? null,
+        totalMinutes:        _num(s.total_learning_minutes ?? (s.features || {}).total_learning_minutes),
+        preMidterm:          _num(tp.pre_midterm_7d_minutes),
+        preFinal:            _num(tp.pre_final_7d_minutes),
+        midRegular:          _num(tp.midterm_regular_minutes),
+        finalRegular:        _num(tp.final_regular_minutes),
+        midPeriod:           _num(tp.midterm_period_minutes),
+        finalPeriod:         _num(tp.final_period_minutes),
+        activeWeeks:         _num(tp.active_weeks),
+        timeSlotDistribution: tp.time_slot_distribution || {},
+        // v2.1 新欄位
+        heatmapRaw:          s.heatmap_matrix?.raw        || {},
+        heatmapNorm:         s.heatmap_matrix?.normalized || {},
+        hourlyRaw:           s.hourly_distribution?.raw        || [],
+        hourlyNorm:          s.hourly_distribution?.normalized || [],
+        late_night_ratio:    _num(tp.late_night_ratio),
       };
     });
     return applyFilters ? _filterRows(rows) : rows;
@@ -297,9 +268,8 @@ const BehaviorTimeTab = (() => {
 
   function _getRowCache() {
     if (!_rowCache) {
-      const all      = _studentRows(false);
-      const filtered = _filterRows(all);
-      _rowCache = { all, filtered };
+      const all = _studentRows(false);
+      _rowCache = { all, filtered: _filterRows(all) };
     }
     return _rowCache;
   }
@@ -309,15 +279,15 @@ const BehaviorTimeTab = (() => {
   }
 
   function _renderAll() {
-    _rowCache = null;   // 重置快取，確保本輪使用最新篩選條件
-    const cache   = _getRowCache();
-    const rows    = cache.filtered;
+    // 只重建 filtered，all 已在 init 時建立，不重複 join
+    if (_rowCache) {
+      _rowCache.filtered = _filterRows(_rowCache.all);
+    } else {
+      _rowCache = null;   // fallback：強制完整重建
+    }
+    const rows    = _filteredStudentRows();
     const countEl = document.getElementById("timeFilterCount");
-    const hasSemesterField = cache.all.some(r => r.semester);
-    const semNote = _filterSemester !== "all" && !hasSemesterField
-      ? "（目前資料未含學生年度欄位，請重跑新版 ETL 取得精準分年）"
-      : "";
-    if (countEl) countEl.textContent = `共 ${rows.length.toLocaleString()} 筆${semNote}`;
+    if (countEl) countEl.textContent = `共 ${rows.length.toLocaleString()} 筆`;
 
     // ── 原有圖表 ──
     renderWeeklyQuiz("weeklyQuizChart");

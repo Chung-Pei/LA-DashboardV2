@@ -97,21 +97,9 @@ const BehaviorRadarTab = (() => {
   }
   function _formatDateTime(v){if(!v)return"未標示";return String(v).replace("T"," ").slice(0,16);}
 
-  function _mainGradeRows(){
-    const mainData=typeof DATA!=="undefined"?DATA:window.DATA;
-    const students=mainData?.students||{},rows=[];
-    Object.entries(students).forEach(([sourceId,info])=>{
-      (info?.records||[]).forEach(rec=>{
-        rows.push({source_id:sourceId,masked_id:info?.name_masked||sourceId,semester:String(rec.semester||""),final_score:rec.final,semester_score:rec.semester_score});
-      });
-    });
-    return rows;
-  }
+  // behavior.json 已由 ETL 回填 final_score / edu_type，直接使用，無需再 join DATA
   function _enrichBehaviorStudents(students){
-    const gradeRows=_mainGradeRows();
-    if(!gradeRows.length)return students||[];
-    const byMasked=new Map((students||[]).map(s=>[s.masked_id,s]));
-    return gradeRows.map(g=>({...(byMasked.get(g.masked_id)||{}),...g})).filter(s=>s.masked_id&&s.features);
+    return (students || []).filter(s => s.masked_id && s.features);
   }
 
   /* FIX 1 */
@@ -180,30 +168,21 @@ const BehaviorRadarTab = (() => {
     _selectedSemester=semester;
     const base=_radarData?._base||_radarData;
     if(semester==="all"){
-      // 恢復跨年總量
       _behaviorStudents=_allStudents;
       _radarData=base;
       _semesterFilterNote=null;
     }else{
-      // 嘗試 by_semester 分年資料
       const semData=base?.by_semester?.[semester];
       if(semData){
         _radarData={...base,_base:base,clusters:semData.clusters,pass_vs_fail:semData.pass_vs_fail,meta:{...(base.meta||{}),student_count:semData.student_count}};
-        // 若 students 有 semester 欄位則篩選，否則保留全量（by_semester clusters 已是該年度資料）
         const bySem=_allStudents.filter(s=>String(s.semester||"").replace(/-/g,"")==String(semester).replace(/-/g,""));
         _behaviorStudents=bySem.length>0?bySem:_allStudents;
         _semesterFilterNote=null;
       }else{
-        // 無 ETL 分年資料時，若學生明細可辨識年度，就以前端即時計算。
+        // by_semester 不存在：ETL 尚未產出，顯示提示但不做前端即時計算
         _radarData={...base,_base:base};
-        const bySem=_allStudents.filter(s=>String(s.semester||"").replace(/-/g,"")==String(semester).replace(/-/g,""));
-        if(bySem.length>0){
-          _behaviorStudents=bySem;
-          _semesterFilterNote=`ℹ ${_formatSemester(semester)} 以學生明細即時計算；重跑新版 ETL 後會產出 by_semester 加速載入`;
-        }else{
-          _behaviorStudents=_allStudents;
-          _semesterFilterNote=`⚠ ${_formatSemester(semester)} 無獨立分年資料，目前顯示跨年總量（ETL 尚未產出 by_semester）`;
-        }
+        _behaviorStudents=_allStudents;
+        _semesterFilterNote=`⚠ ${_formatSemester(semester)} 無分年資料，目前顯示跨年總量（請重跑 ETL）`;
       }
     }
     _renderBehaviorMetaStrip();_passFilter="all";

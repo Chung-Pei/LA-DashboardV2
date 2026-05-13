@@ -144,46 +144,6 @@ const BehaviorCorrelationTab = (() => {
     return hasR && hasScatter;
   }
 
-  function _featureListFromBehavior(students, sourceData) {
-    if (sourceData?.features?.length) return sourceData.features;
-    const seen = new Set();
-    students.forEach(s => {
-      Object.keys(s.features || {}).forEach(k => seen.add(k));
-    });
-    const preferred = Object.keys(FEAT_LABELS).filter(k => seen.has(k));
-    const remaining = [...seen].filter(k => !preferred.includes(k));
-    return [...preferred, ...remaining];
-  }
-
-  function _targetList(sourceData) {
-    if (sourceData?.targets?.length) return sourceData.targets;
-    if (sourceData?.grades?.length) return sourceData.grades;
-    return ["midterm_score", "final_score"];
-  }
-
-  function _gradeRowsFromData(mainData, targetSemester) {
-    const rows = [];
-    const students = mainData?.students || {};
-    Object.entries(students).forEach(([sourceId, info]) => {
-      (info?.records || []).forEach(rec => {
-        if (targetSemester && String(rec.semester || "") !== String(targetSemester)) return;
-        if (_toNumber(rec.midterm) === null &&
-            _toNumber(rec.final) === null &&
-            _toNumber(rec.semester_score) === null) return;
-        rows.push({
-          source_id: sourceId,
-          anon_id:   String(info?.anon_id || ""),
-          masked_id: info?.name_masked || sourceId,
-          semester: String(rec.semester || ""),
-          midterm_score: _toNumber(rec.midterm),
-          final_score: _toNumber(rec.final),
-          semester_score: _toNumber(rec.semester_score),
-        });
-      });
-    });
-    return rows;
-  }
-
   function _pearsonValue(rows, feat, target) {
     const pairs = rows
       .map(row => ({ x: _toNumber(row.features?.[feat]), y: _toNumber(row[target]) }))
@@ -242,58 +202,6 @@ const BehaviorCorrelationTab = (() => {
     return den ? Math.round(num / den * 10000) / 10000 : null;
   }
 
-  async function _rebuildCorrelationFromMainData(sourceData) {
-    const mainData = typeof DATA !== "undefined" ? DATA : window.DATA;
-    if (!mainData?.students || !BehaviorLoader?.loadBehaviorData) return sourceData;
-
-    const behavior = await BehaviorLoader.loadBehaviorData();
-    const students = behavior.students || [];
-    // BUG-1 修正：使用實際篩選學期（而非硬編碼空字串），確保重建時不混入其他年度
-    const targetSemester = (_filterSemester !== "all") ? _filterSemester : "";
-    const gradeRows = _gradeRowsFromData(mainData, targetSemester);
-    const targets = _targetList(sourceData);
-    const features = _featureListFromBehavior(students, sourceData);
-    const byAnon = new Map(students.map(s => [s.anon_id, s]));
-    const byMasked = new Map(students.map(s => [s.masked_id, s]));
-
-    const joined = gradeRows.map(grades => {
-      const s = byAnon.get(grades.anon_id) || byMasked.get(grades.masked_id);
-      if (!s) return null;
-      return {
-        anon_id: s.anon_id,
-        masked_id: s.masked_id,
-        semester: grades.semester || s.semester || "",
-        cluster: s.cluster || "",
-        features: s.features || {},
-        ...grades,
-      };
-    }).filter(Boolean);
-
-    if (!joined.length) return sourceData;
-
-    const pearson = {};
-    targets.forEach(target => {
-      pearson[target] = {};
-      features.forEach(feat => {
-        pearson[target][feat] = _pearsonValue(joined, feat, target);
-      });
-    });
-
-    return {
-      ...sourceData,
-      features,
-      targets,
-      pearson,
-      scatter_data: joined,
-      meta: {
-        ...(sourceData?.meta || {}),
-        semesters: sourceData?.meta?.semesters || mainData?.meta?.semesters || behavior.meta?.semesters || [],
-        rebuilt_in_browser: true,
-        joined_students: joined.length,
-      },
-    };
-  }
-
   // ── 初始化 ───────────────────────────────────────────────
 
   async function init(heatmapId = "corrHeatmap", scatterWrapperId = "scatterSection") {
@@ -306,12 +214,11 @@ const BehaviorCorrelationTab = (() => {
       ]);
 
       _corrData = corrRaw;
-      const rawScatter = _corrData?.scatter_data || [];
-      const needsRebuild = !_hasUsableCorrelation(_corrData) ||
-        (Array.isArray(rawScatter) && rawScatter.length > 0 &&
-          (!rawScatter.some(r => r.semester) || !rawScatter.some(r => r.cluster)));
-      if (needsRebuild) {
-        _corrData = await _rebuildCorrelationFromMainData(_corrData);
+
+      // 若 ETL 資料不完整（無 scatter 或無欄位）直接提示，不再前端重建
+      if (!_hasUsableCorrelation(_corrData)) {
+        BehaviorLoader.showError("tab-correlation", "correlation.json 資料不完整，請重跑 ETL 後重新整理頁面。");
+        return;
       }
 
       // 建立 masked_id → behavior student 索引（取得 cluster）
@@ -501,25 +408,27 @@ const BehaviorCorrelationTab = (() => {
     _filterSemester = document.getElementById("corrSemFilter")?.value     || "all";
     _filterCluster  = document.getElementById("corrClusterFilter")?.value  || "all";
     _filterPass     = document.getElementById("corrPassFilter")?.value     || "all";
-    _filterEduType  = document.getElementById("corrEduTypeFilter")?.value  || "all";  // Ph2b
-    _filterOutlier  = document.getElementById("corrOutlierToggle")?.checked ?? false; // Ph2b
+    _filterEduType  = document.getElementById("corrEduTypeFilter")?.value  || "all";
+    _filterOutlier  = document.getElementById("corrOutlierToggle")?.checked ?? false;
+    _lastFilterKey  = null;   // 強制重新過濾
     _applyFiltersAndRender("corrHeatmap", "scatterSection");
   }
 
   // ── 取得篩選後資料 ────────────────────────────────────────
 
-  // BUG-3 修正：與 BehaviorTimeTab.PASS_THRESHOLD 對齊，統一使用此常數，
-  // 避免兩處各自硬編碼 60 造成日後不同步。
-  const PASS_THRESHOLD_CORR = 60;
+  // ── 篩選快取：條件未變時不重新過濾 ──────────────────────
+  let _lastFilterKey  = null;
+  let _lastFiltered   = null;
 
   function _filteredScatterData() {
+    const key = `${_filterSemester}|${_filterCluster}|${_filterPass}|${_filterEduType}|${_filterOutlier}`;
+    if (key === _lastFilterKey && _lastFiltered !== null) return _lastFiltered;
+
     const raw = _allScatterData;
-    if (!Array.isArray(raw)) return raw;
+    if (!Array.isArray(raw)) { _lastFilterKey = key; _lastFiltered = raw; return raw; }
 
-    // Ph2b：異常值閾值（來自 ETL 預算）
     const thresholds = _corrData?.outlier_thresholds || {};
-
-    return raw.filter(row => {
+    _lastFiltered = raw.filter(row => {
       if (_filterSemester !== "all") {
         const rowSem = String(row.semester || "").replace(/-/g,"");
         const selSem = String(_filterSemester).replace(/-/g,"");
@@ -535,11 +444,9 @@ const BehaviorCorrelationTab = (() => {
         if (_filterPass === "pass" && !passing) return false;
         if (_filterPass === "fail" && passing) return false;
       }
-      // Ph2b：學制篩選
       if (_filterEduType !== "all") {
         if ((row.edu_type || "") !== _filterEduType) return false;
       }
-      // Ph2b：異常值排除（IQR 法，使用 ETL 預算閾值）
       if (_filterOutlier && Object.keys(thresholds).length) {
         for (const [feat, bounds] of Object.entries(thresholds)) {
           const val = _toNumber(row.features?.[feat]);
@@ -549,6 +456,8 @@ const BehaviorCorrelationTab = (() => {
       }
       return true;
     });
+    _lastFilterKey = key;
+    return _lastFiltered;
   }
 
   function _applyFiltersAndRender(heatmapId, scatterWrapperId) {
@@ -556,32 +465,15 @@ const BehaviorCorrelationTab = (() => {
     const count = Array.isArray(filtered) ? filtered.length : "—";
 
     const countEl = document.getElementById("corrFilterCount");
-    const semHasSemesterField = Array.isArray(_allScatterData) &&
-      _allScatterData.some(r => r.semester);
-    const semNote = (_filterSemester !== "all" && !semHasSemesterField)
-      ? "（年度欄位尚未由 ETL 產出，篩選無效）"
-      : "";
-    if (countEl) countEl.textContent = `共 ${count} 筆${semNote}`;
+    if (countEl) countEl.textContent = `共 ${count} 筆`;
 
-    const features = _features();
-    const targets  = _targets();
-    if (Array.isArray(filtered) && filtered.length >= 5) {
-      const pearson = {}, spearman = {};
-      targets.forEach(target => {
-        pearson[target] = {}; spearman[target] = {};
-        features.forEach(feat => {
-          pearson[target][feat]  = _pearsonValue(filtered, feat, target);
-          spearman[target][feat] = _spearmanValue(filtered, feat, target);
-        });
-      });
-      _corrData = { ..._corrData, pearson, spearman, scatter_data: filtered };
-    } else {
-      _corrData = { ..._corrData, scatter_data: filtered };
-    }
+    // 矩陣直接沿用 ETL 預算值（pearson / spearman）；
+    // 僅更新 scatter_data 供散佈圖使用
+    _corrData = { ..._corrData, scatter_data: filtered };
 
     _renderHeatmap(heatmapId);
     _renderScatterSelector(scatterWrapperId);
-    _renderLaggedSection(scatterWrapperId);   // C3：滯後相關性區塊
+    _renderLaggedSection(scatterWrapperId);
   }
 
   /**
