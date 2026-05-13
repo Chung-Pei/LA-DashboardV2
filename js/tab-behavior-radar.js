@@ -376,6 +376,7 @@ const BehaviorRadarTab = (() => {
     _renderControls("radarControls");
     renderClusterSummary("clusterSummaryCards");
     _renderRadar("radarChart");
+    _renderInsights();   // FIX: 切換視圖時同步更新洞察面板
   }
   // toggleCluster is an alias kept for external API compatibility
   function toggleCluster(key){selectCluster(key);}

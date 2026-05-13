@@ -43,6 +43,8 @@ const BehaviorCorrelationTab = (() => {
     semester_score: "學期成績",
   };
 
+  const PASS_THRESHOLD_CORR = 60;   // 及格門檻（與 time tab 保持一致）
+
   let _corrData     = null;
   let _scatterChart = null;
   let _currentTarget = null;
@@ -400,6 +402,7 @@ const BehaviorCorrelationTab = (() => {
 
   function setCorrType(type) {
     _corrType = type;
+    _lastFilterKey = null;   // 切換相關係數方法時強制重新過濾，確保 scatter 與熱力圖同步
     _updateCorrTypeButtons();
     _renderHeatmap("corrHeatmap");
   }
