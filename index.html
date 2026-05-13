@@ -1204,15 +1204,19 @@ body.light .subject-input {
 
 <!-- ══ PANEL A ══ -->
 <div class="panel" id="panelA">
-  <div class="filter-bar">
+  <div class="filter-bar" id="aFilterBar">
+
+    <!-- 1. 學期 -->
     <div class="filter-pair">
       <span class="filter-label">學期 Semester</span>
-      <select id="aFilterSem" onchange="updateSheetFilter(); renderA()"></select>
+      <select id="aFilterSem" onchange="onAFilterChange('semester')"></select>
     </div>
     <div class="filter-sep"></div>
+
+    <!-- 2. 學制（規則一連動） -->
     <div class="filter-pair">
       <span class="filter-label">學制 Program</span>
-      <select id="aFilterProgram" onchange="updateSheetFilter(); renderA()">
+      <select id="aFilterProgram" onchange="onAFilterChange('program')">
         <option value="all">全部學制</option>
         <option value="2yr_gen">二技一般</option>
         <option value="2yr_work">二技在職</option>
@@ -1224,19 +1228,51 @@ body.light .subject-input {
       </select>
     </div>
     <div class="filter-sep"></div>
+
+    <!-- 3. 課程類型（規則二連動） -->
     <div class="filter-pair">
-      <span class="filter-label">班級 Class</span>
-      <select id="aFilterSheet" onchange="renderA()"></select>
-    </div>
-    <div class="filter-sep"></div>
-    <div class="filter-pair">
-      <span class="filter-label">類型 Type</span>
-      <select id="aFilterType" onchange="updateSheetFilter(); renderA()">
+      <span class="filter-label">課程類型 Type</span>
+      <select id="aFilterType" onchange="onAFilterChange('courseType')">
         <option value="all">全部 All</option>
-        <option value="theory">正課 Theory</option>
-        <option value="practicum">實驗 Practicum</option>
+        <option value="theory">正課</option>
+        <option value="practicum">實驗課</option>
       </select>
     </div>
+    <div class="filter-sep"></div>
+
+    <!-- 4. 班級（規則三動態生成，含筆數） -->
+    <div class="filter-pair">
+      <span class="filter-label">班級 Class</span>
+      <select id="aFilterSheet" onchange="onAFilterChange('class')"></select>
+    </div>
+
+    <!-- 清除所有條件按鈕 -->
+    <button id="aResetBtn" onclick="resetAFilters()"
+            style="margin-left:auto;padding:4px 12px;border-radius:6px;border:1px solid var(--border2);
+                   background:var(--surface2);color:var(--text-dim);font-size:10px;cursor:pointer;
+                   white-space:nowrap;flex-shrink:0;transition:all 0.15s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text-dim)'">
+      ↺ 清除條件
+    </button>
+  </div>
+
+  <!-- 重置提示列（規則四） -->
+  <div id="aResetHint" style="display:none;padding:6px 12px;margin-bottom:8px;border-radius:6px;
+       font-size:11px;background:rgba(247,164,79,0.10);border:1px solid rgba(247,164,79,0.25);
+       color:var(--accent3);display:flex;align-items:center;gap:10px">
+    <span id="aResetHintText"></span>
+    <button id="aUndoBtn" onclick="undoAFilterReset()"
+            style="padding:2px 10px;border-radius:4px;border:1px solid var(--accent3);
+                   background:none;color:var(--accent3);font-size:10px;cursor:pointer;white-space:nowrap">
+      復原
+    </button>
+  </div>
+
+  <!-- 防空值提示列 -->
+  <div id="aEmptyHint" style="display:none;padding:8px 14px;margin-bottom:8px;border-radius:6px;
+       font-size:11px;background:rgba(240,112,112,0.10);border:1px solid rgba(240,112,112,0.25);
+       color:var(--red)">
   </div>
 
   <div class="stat-row" id="aStats"></div>
@@ -1320,30 +1356,43 @@ body.light .subject-input {
 </div>
 <div style="display:none" id="panelB"></div>
 
-<!-- ══ PANEL C ══ (整合：個案追蹤 + 重修分析) -->
+<!-- ══ PANEL C ══ (整合：全體學生 + 重修分析) -->
 <div class="panel" id="panelC">
 
-  <!-- ── 第一層：常駐搜尋列 ── -->
-  <div class="filter-bar" style="flex-wrap:wrap;gap:10px 16px">
-    <div class="filter-pair">
-      <span class="filter-label">搜尋學號 Search ID</span>
-      <div class="search-wrap">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="cSearch" placeholder="輸入學號片段（如 1211、****01）" oninput="searchStudent()" autocomplete="off">
-        <div class="search-results" id="searchResults"></div>
-      </div>
+  <!-- ── 模式切換（常駐頂部） ── -->
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <div class="view-controls-seg" id="cViewControls">
+      <button class="seg-btn active" data-view="general" onclick="switchCView('general')">全體學生</button>
+      <button class="seg-btn" data-view="retake"  onclick="switchCView('retake')">重修分析</button>
     </div>
-    <div class="filter-sep"></div>
+    <span id="cNoDataHint" style="display:none;font-size:10px;color:var(--yellow);margin-left:8px">⚠ 此學期無 LMS 行為資料</span>
+    <!-- 清除條件按鈕（全體模式顯示） -->
+    <button id="cResetBtn" onclick="resetCFilters()"
+            style="margin-left:auto;padding:4px 12px;border-radius:6px;border:1px solid var(--border2);
+                   background:var(--surface2);color:var(--text-dim);font-size:10px;cursor:pointer;
+                   white-space:nowrap;transition:all 0.15s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text-dim)'">
+      ↺ 清除條件
+    </button>
+  </div>
+
+  <!-- ══ 全體學生篩選器組 ══ -->
+  <div id="cFilterGeneral" class="filter-bar" style="flex-wrap:wrap;gap:10px 14px">
+
+    <!-- 1. 學期 -->
     <div class="filter-pair">
-      <span class="filter-label">學年度 Year</span>
-      <select id="cFilterYear" onchange="renderCView()">
-        <option value="all">全部學年</option>
+      <span class="filter-label">學期 Semester</span>
+      <select id="cFilterSem" onchange="onCGeneralFilterChange('semester')">
+        <option value="all">全部學期 All</option>
       </select>
     </div>
     <div class="filter-sep"></div>
+
+    <!-- 2. 學制 -->
     <div class="filter-pair">
       <span class="filter-label">學制 Program</span>
-      <select id="cFilterProgram" onchange="renderCView()">
+      <select id="cFilterProgram" onchange="onCGeneralFilterChange('program')">
         <option value="all">全部學制</option>
         <option value="2yr_gen">二技一般</option>
         <option value="2yr_work">二技在職</option>
@@ -1355,30 +1404,96 @@ body.light .subject-input {
       </select>
     </div>
     <div class="filter-sep"></div>
+
+    <!-- 3. 課程類型 -->
     <div class="filter-pair">
-      <span class="filter-label">評量 Exam</span>
+      <span class="filter-label">課程類型 Type</span>
       <div class="mode-toggle">
-        <button class="mode-btn active" id="cExamSem" onclick="setCExam('semester_score')">學期</button>
-        <button class="mode-btn" id="cExamMid" onclick="setCExam('midterm')">期中</button>
-        <button class="mode-btn" id="cExamFin" onclick="setCExam('final')">期末</button>
+        <button class="mode-btn active" id="cTypeAll"    onclick="setCType('all')">全部</button>
+        <button class="mode-btn"        id="cTypeTheory" onclick="setCType('theory')">正課</button>
+        <button class="mode-btn"        id="cTypePrac"   onclick="setCType('practicum')">實驗課</button>
       </div>
     </div>
-    <span id="cSearchHint" style="margin-left:auto;font-size:11px;color:var(--text-dim);white-space:nowrap">請輸入學號片段以查看個案資料 <span style="font-family:'JetBrains Mono',monospace;font-size:10px">Search a student ID fragment above</span></span>
+    <div class="filter-sep"></div>
+
+    <!-- 4. 評量指標 -->
+    <div class="filter-pair">
+      <span class="filter-label">評量指標 Metric</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="cExamSem" onclick="setCExam('semester_score')">學期</button>
+        <button class="mode-btn"        id="cExamMid" onclick="setCExam('midterm')">期中</button>
+        <button class="mode-btn"        id="cExamFin" onclick="setCExam('final')">期末</button>
+      </div>
+    </div>
+    <div class="filter-sep"></div>
+
+    <!-- 5. 及格狀況 -->
+    <div class="filter-pair">
+      <span class="filter-label">及格狀況 Pass</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="cPassAll"  onclick="setCPass('all')">全體</button>
+        <button class="mode-btn"        id="cPassPass" onclick="setCPass('pass')">✅ 及格</button>
+        <button class="mode-btn"        id="cPassFail" onclick="setCPass('fail')">❌ 不及格</button>
+      </div>
+    </div>
+    <div class="filter-sep"></div>
+
+    <!-- 6. 搜尋學號（選填，高亮用） -->
+    <div class="filter-pair">
+      <span class="filter-label">搜尋學號 Search ID</span>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="cSearch" placeholder="輸入學號片段（選填，高亮標示）"
+               oninput="searchStudent()" autocomplete="off">
+        <div class="search-results" id="searchResults"></div>
+      </div>
+    </div>
   </div>
 
-  <!-- ── 第二層：族群視圖切換 ── -->
-  <div style="display:flex;align-items:center;gap:8px;margin:10px 0 14px">
-    <div class="view-controls-seg" id="cViewControls">
-      <button class="seg-btn active" data-view="general" onclick="switchCView('general')">全體學生</button>
-      <button class="seg-btn" data-view="retake" onclick="switchCView('retake')">重修分析</button>
+  <!-- ══ 重修分析篩選器組 ══ -->
+  <div id="cFilterRetake" class="filter-bar" style="display:none;flex-wrap:wrap;gap:10px 14px">
+
+    <!-- 1. 搜尋學號（必填） -->
+    <div class="filter-pair">
+      <span class="filter-label">搜尋學號 <span style="color:var(--red)">*必填</span></span>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="cSearchRetake" placeholder="請輸入學號片段以查詢重修記錄"
+               oninput="onCRetakeSearch()" autocomplete="off">
+        <div class="search-results" id="searchResultsRetake"></div>
+      </div>
     </div>
-    <span id="cNoDataHint" style="display:none;font-size:10px;color:var(--yellow);margin-left:8px">⚠ 此學期無 LMS 行為資料</span>
+    <div class="filter-sep"></div>
+
+    <!-- 2. 評量指標 -->
+    <div class="filter-pair">
+      <span class="filter-label">評量指標 Metric</span>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="cExamSemR" onclick="setCExam('semester_score')">學期</button>
+        <button class="mode-btn"        id="cExamMidR" onclick="setCExam('midterm')">期中</button>
+        <button class="mode-btn"        id="cExamFinR" onclick="setCExam('final')">期末</button>
+      </div>
+    </div>
+
+    <!-- 空學號提示 -->
+    <span id="cRetakeSearchHint"
+          style="margin-left:8px;font-size:11px;color:var(--accent3);white-space:nowrap;align-self:center">
+      ← 請先輸入學號以查看個案重修軌跡
+    </span>
   </div>
+
+  <!-- 課程類型鎖定提示（全體模式） -->
+  <div id="cTypeLockHint" style="display:none;padding:5px 12px;margin-bottom:6px;border-radius:6px;
+       font-size:11px;background:rgba(247,164,79,0.08);border:1px solid rgba(247,164,79,0.2);
+       color:var(--accent3)"></div>
+
+  <!-- 防空值提示 -->
+  <div id="cEmptyHint" style="display:none;padding:8px 14px;margin-bottom:8px;border-radius:6px;
+       font-size:11px;background:rgba(240,112,112,0.10);border:1px solid rgba(240,112,112,0.25);
+       color:var(--red)"></div>
 
   <!-- ── 個案搜尋結果（常駐，搜尋後展開） ── -->
-  <div id="profileWrap">
-    <!-- empty state by default, filled when student selected -->
-  </div>
+  <div id="profileWrap"></div>
 
   <!-- ── 統計卡 ── -->
   <div class="stat-row" id="cStats"></div>
@@ -1408,21 +1523,19 @@ body.light .subject-input {
 
   <!-- ── 視圖面板：重修分析 ── -->
   <div id="cPanelRetake" class="c-view-panel" style="display:none">
-    <!-- 統計摘要 -->
     <div class="stat-row" id="bStats" style="margin-bottom:14px"></div>
 
-    <!-- 顯示模式切換 -->
     <div class="filter-bar" style="padding:8px 0;background:none;border:none;margin-bottom:10px">
       <span class="filter-label">顯示模式 Mode</span>
       <div class="mode-toggle">
-        <button class="mode-btn active" id="modeBySheet" onclick="setBMode('sheet')">依班級名稱</button>
-        <button class="mode-btn" id="modeByStudent" onclick="setBMode('student')">同學號全紀錄</button>
+        <button class="mode-btn active" id="modeBySheet"   onclick="setBMode('sheet')">依班級名稱</button>
+        <button class="mode-btn"        id="modeByStudent" onclick="setBMode('student')">同學號全紀錄</button>
       </div>
       <div class="filter-sep"></div>
       <span class="filter-label">課程類型 Type</span>
       <div class="mode-toggle">
-        <button class="mode-btn active" id="bTypeTheory" onclick="setBType('theory')">正課</button>
-        <button class="mode-btn" id="bTypePracticum" onclick="setBType('practicum')">實驗課</button>
+        <button class="mode-btn active" id="bTypeTheory"    onclick="setBType('theory')">正課</button>
+        <button class="mode-btn"        id="bTypePracticum" onclick="setBType('practicum')">實驗課</button>
       </div>
     </div>
 
@@ -1450,9 +1563,7 @@ body.light .subject-input {
         <div class="dot"></div>正課 × 實驗 四象限 Cross-Domain Quadrant
         <span style="color:var(--text-dim);font-size:9px;margin-left:6px">⚠ 此圖同時比較正課與實驗課，不受上方課程篩選影響</span>
       </div>
-      <div class="chart-wrap" style="height:260px">
-        <canvas id="chartQuadrant"></canvas>
-      </div>
+      <div class="chart-wrap" style="height:260px"><canvas id="chartQuadrant"></canvas></div>
       <div class="quadrant-labels">
         <div class="q-label"><div class="q-name" style="color:var(--accent2)">Q1 右上：雙強</div><div class="q-desc">正課強 · 實驗強 → 無需介入</div></div>
         <div class="q-label"><div class="q-name" style="color:var(--accent3)">Q2 左上：實作強</div><div class="q-desc">正課弱 · 實驗強 → 加強流病報告邏輯</div></div>
@@ -1465,19 +1576,14 @@ body.light .subject-input {
       <div class="chart-card">
         <div class="chart-title" style="--accent-color:var(--accent4)">
           <div class="dot"></div>重修生首修成績分布 Retaker First-Score Distribution
-          <span style="color:var(--text-dim);font-size:9px;margin-left:4px">— 哪個分數段最容易重修</span>
         </div>
-        <div class="chart-wrap" style="height:200px">
-          <canvas id="chartRetakerFirstDist"></canvas>
-        </div>
+        <div class="chart-wrap" style="height:200px"><canvas id="chartRetakerFirstDist"></canvas></div>
       </div>
       <div class="chart-card">
         <div class="chart-title" style="--accent-color:var(--accent2)">
           <div class="dot"></div>重修改善率依學制 Δ by Program
         </div>
-        <div class="chart-wrap" style="height:200px">
-          <canvas id="chartDeltaByProgram"></canvas>
-        </div>
+        <div class="chart-wrap" style="height:200px"><canvas id="chartDeltaByProgram"></canvas></div>
       </div>
     </div>
 
@@ -1486,18 +1592,13 @@ body.light .subject-input {
         <div class="chart-title" style="--accent-color:var(--accent3)">
           <div class="dot"></div>重修次數分布 Retake Count Distribution
         </div>
-        <div class="chart-wrap" style="height:220px">
-          <canvas id="chartRetakeCount"></canvas>
-        </div>
+        <div class="chart-wrap" style="height:220px"><canvas id="chartRetakeCount"></canvas></div>
       </div>
       <div class="chart-card">
         <div class="chart-title" style="--accent-color:var(--accent4)">
           <div class="dot"></div>首修成績 vs 重修進步幅度 First Score vs Δ
-          <span style="color:var(--text-dim);font-size:9px;margin-left:6px">— 右下方代表首修高但重修退步</span>
         </div>
-        <div class="chart-wrap" style="height:220px">
-          <canvas id="chartFirstVsDelta"></canvas>
-        </div>
+        <div class="chart-wrap" style="height:220px"><canvas id="chartFirstVsDelta"></canvas></div>
       </div>
     </div>
   </div>
@@ -1506,6 +1607,38 @@ body.light .subject-input {
 
 <!-- ══ PANEL D ══ -->
 <div class="panel active" id="panelD">
+  <!-- ── 學期雙模選擇器 ── -->
+  <div class="filter-bar" id="dSemFilterBar">
+    <div class="filter-pair" style="align-items:flex-start;flex-wrap:wrap;gap:6px">
+      <span class="filter-label" style="margin-top:6px">學期 Semester</span>
+
+      <!-- 模式切換 -->
+      <div class="mode-toggle" style="flex-shrink:0">
+        <button class="mode-btn active" id="dSemModeRange" onclick="setDSemMode('range')">範圍</button>
+        <button class="mode-btn" id="dSemModeMulti" onclick="setDSemMode('multi')">多選</button>
+      </div>
+
+      <!-- 範圍模式：雙滑桿 -->
+      <div id="dSemRangeWrap" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <input type="range" id="dSemStart" min="0" max="29" step="1" value="0"
+               style="width:110px;accent-color:var(--accent)"
+               oninput="onDSemRangeChange()">
+        <span style="font-size:10px;color:var(--text-dim)">–</span>
+        <input type="range" id="dSemEnd" min="0" max="29" step="1" value="29"
+               style="width:110px;accent-color:var(--accent)"
+               oninput="onDSemRangeChange()">
+        <span id="dSemRangeLabel" class="year-range-badge" style="min-width:130px;justify-content:center">100(1) – 114(2)</span>
+        <span id="dSemRangeCount" style="font-size:10px;color:var(--text-dim)"></span>
+      </div>
+
+      <!-- 多選模式：膠囊 -->
+      <div id="dSemMultiWrap" style="display:none;flex-wrap:wrap;gap:4px;max-width:100%">
+        <!-- 由 initDSemFilter() 動態生成 -->
+      </div>
+      <span id="dSemMultiCount" style="display:none;font-size:10px;color:var(--text-dim);margin-top:6px"></span>
+    </div>
+  </div>
+
   <div class="filter-bar">
     <div class="filter-pair">
       <span class="filter-label">學制 Program</span>
@@ -1562,6 +1695,12 @@ body.light .subject-input {
     <span class="program-badge prog-retake-student">重修生</span>
   </div>
 
+  <!-- 模式提示列 -->
+  <div id="dModeHint" style="margin-bottom:10px;padding:6px 12px;border-radius:6px;font-size:11px;
+       background:rgba(79,142,247,0.08);border:1px solid rgba(79,142,247,0.18);color:var(--text-dim)">
+    📈 <strong style="color:var(--accent)">範圍模式</strong> — 顯示連續趨勢折線；最多 6 學制折線，超過時自動合併為總平均。
+  </div>
+
   <!-- 跨屆趨勢折線圖 -->
   <div class="chart-card" style="margin-bottom:14px">
     <div class="chart-title" style="--accent-color:var(--accent)">
@@ -1573,22 +1712,36 @@ body.light .subject-input {
     </div>
   </div>
 
-  <!-- 學制橫向比較 -->
-  <div class="chart-grid chart-grid-2">
-    <div class="chart-card">
-      <div class="chart-title" style="--accent-color:var(--accent2)">
-        <div class="dot"></div>各學期學制比較 Program Comparison per Semester
+  <!-- 學制橫向比較（多選模式專屬） -->
+  <div id="dProgramBarWrap" style="display:none">
+    <div class="chart-grid chart-grid-2">
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent2)">
+          <div class="dot"></div>各學期學制比較 Program Comparison per Semester
+        </div>
+        <div class="chart-wrap" style="height:240px">
+          <canvas id="chartProgramBar"></canvas>
+        </div>
       </div>
-      <div class="chart-wrap" style="height:240px">
-        <canvas id="chartProgramBar"></canvas>
+      <div class="chart-card">
+        <div class="chart-title" style="--accent-color:var(--accent3)">
+          <div class="dot"></div>及格率比較 Pass Rate Comparison
+        </div>
+        <div class="chart-wrap" style="height:240px">
+          <canvas id="chartPassRate"></canvas>
+        </div>
       </div>
     </div>
-    <div class="chart-card">
+  </div>
+
+  <!-- 及格率折線（範圍模式專屬） -->
+  <div id="dPassRateWrap">
+    <div class="chart-card" style="margin-top:14px">
       <div class="chart-title" style="--accent-color:var(--accent3)">
-        <div class="dot"></div>及格率比較 Pass Rate Comparison
+        <div class="dot"></div>及格率趨勢 Pass Rate Trend
       </div>
       <div class="chart-wrap" style="height:240px">
-        <canvas id="chartPassRate"></canvas>
+        <canvas id="chartPassRateRange"></canvas>
       </div>
     </div>
   </div>
@@ -1944,6 +2097,11 @@ let bMode = 'sheet';
 let dView   = 'merge';
 let dMetric = 'semester_score';
 let dType   = 'theory';  // 'theory' | 'practicum'
+
+// Panel D 學期篩選狀態
+let dSemMode     = 'range';   // 'range' | 'multi'
+let dSemRange    = [0, 29];   // [startIdx, endIdx]（索引對應 DATA.meta.semesters）
+let dSemSelected = new Set(); // 多選模式：已選學期 value set
 
 // ══════════════════════════════════════════════════════════
 // 統一 Chart.js Tooltip 樣式
@@ -2948,6 +3106,8 @@ function init() {
   }
 
   populateFilters();
+  initDSemFilter();  // ← Phase 2：初始化學期雙模選擇器
+  populateCFilterSem(); // ← Phase 4：初始化 Panel C 學期選單
   renderD();
   // 掛載說明與放大按鈕（renderD 完成後 DOM 已就緒）
   requestAnimationFrame(() => {
@@ -2985,10 +3145,16 @@ function sortSheetNames(names) {
 function populateFilters() {
   const sems = DATA.meta.semesters;
   const semsDesc = sortSemestersDesc(sems);
-  // Panel A
+
+  // Panel A — 學期選單（最新學期在前）
   const aSem = document.getElementById('aFilterSem');
   aSem.innerHTML = `<option value="all">全學期 All</option>` +
     semsDesc.map(s => `<option value="${s}">${semLabel(s)}</option>`).join('');
+
+  // Panel A — 初始化規則一~三狀態
+  _applyProgramDisabledState('all');
+  _applyTypeLockedState('all');
+  _rebuildSheetOptions('all', 'all', 'all', 'init');
 
   // Trend
   const trendSheets = sortSheetNames([...new Set(
@@ -2997,34 +3163,18 @@ function populateFilters() {
   const aTrend = document.getElementById('aTrendSheet');
   aTrend.innerHTML = trendSheets.map(s => `<option value="${s}">${s}</option>`).join('');
 
-  updateSheetFilter();
-
   // Panel C — 學年度選單（分組折疊）
   populateCYearFilter();
 }
 
 function updateSheetFilter() {
+  // Phase 3：委派給新的 _rebuildSheetOptions，保持向後相容
   const sem  = document.getElementById('aFilterSem').value;
   const type = document.getElementById('aFilterType').value;
   const prog = (document.getElementById('aFilterProgram') || {}).value || 'all';
-  const sheets = sortSheetNames(
-    Object.values(DATA.class_summary)
-      .filter(c =>
-        (sem === 'all' || c.semester === sem) &&
-        (type === 'all' || c.type === type) &&
-        (prog === 'all' || classInfo(c.sheet_name, c.semester).program === prog)
-      )
-      .map(c => c.sheet_name)
-  );
-
-  const el = document.getElementById('aFilterSheet');
-  // 保留使用者目前選擇（如果仍存在於新清單中）
-  const prevVal = el.value;
-  el.innerHTML = `<option value="all">全部班級 All</option>` +
-    sheets.map(s => `<option value="${s}">${s}</option>`).join('');
-  if (prevVal === 'all' || sheets.includes(prevVal)) el.value = prevVal;
-  // 回傳當前選中值（解決 innerHTML 重建後 .value 可能為空的時序問題）
-  return el.value || 'all';
+  _rebuildSheetOptions(sem, prog, type, 'external');
+  // 回傳當前選中值（舊版呼叫端需要此回傳值）
+  return document.getElementById('aFilterSheet').value || 'all';
 }
 
 function cloneClassSummary(c) {
@@ -3113,10 +3263,204 @@ function updateCompareFilter(sem, sheet, type = 'all') {
 }
 
 // ══════════════════════════════════════════════════════════
+// PANEL A — 篩選器連動（Phase 3）
+// ══════════════════════════════════════════════════════════
+
+// 復原用快照
+let _aFilterSnapshot = null;
+
+/**
+ * 統一入口：任一篩選器變動時呼叫
+ * changedField: 'semester' | 'program' | 'courseType' | 'class'
+ */
+function onAFilterChange(changedField) {
+  const sem       = document.getElementById('aFilterSem').value;
+  const program   = document.getElementById('aFilterProgram').value;
+  const courseType= document.getElementById('aFilterType').value;
+
+  // 儲存快照（復原用）
+  _aFilterSnapshot = { sem, program, courseType,
+    sheet: document.getElementById('aFilterSheet').value };
+
+  // 規則一：學期 → 學制反灰
+  _applyProgramDisabledState(sem);
+
+  // 規則二：學制 → 課程類型鎖定
+  _applyTypeLockedState(program);
+
+  // 規則三：三條件 → 班級清單（含筆數）
+  const resetFields = _rebuildSheetOptions(sem, program, courseType, changedField);
+
+  // 規則四：顯示重置提示
+  if (resetFields.length > 0) {
+    _showAResetHint(changedField, resetFields);
+  } else {
+    _hideAResetHint();
+  }
+
+  // 防空值
+  const newSheet = document.getElementById('aFilterSheet').value;
+  const emptyCheck = typeof FilterEngine !== 'undefined'
+    ? FilterEngine.checkEmptyResult(sem, program, courseType, DATA)
+    : { empty: false };
+
+  if (emptyCheck.empty) {
+    _showAEmptyHint(emptyCheck.reason);
+    document.getElementById('aStats').innerHTML =
+      `<div class="empty-state" style="padding:12px;color:var(--red)">⚠ ${emptyCheck.reason}</div>`;
+    return;
+  }
+  _hideAEmptyHint();
+  renderA();
+}
+
+/** 規則一：反灰不可選的學制 option */
+function _applyProgramDisabledState(sem) {
+  const sel = document.getElementById('aFilterProgram');
+  if (!sel) return;
+  const suffix = sem && sem !== 'all' ? String(sem).slice(-1) : null;
+  const disabledMap = { '1': ['4yr'], '2': ['2yr_gen','2yr_work','2yr_night','post'] };
+  const disabled = suffix ? (disabledMap[suffix] || []) : [];
+  const TOOLTIPS = {
+    '4yr':       '四技一般僅於下半學期開課',
+    '2yr_gen':   '二技僅於上半學期開課',
+    '2yr_work':  '二技在職僅於上半學期開課',
+    '2yr_night': '二技夜間僅於上半學期開課',
+    'post':      '學士後護僅於上半學期開課',
+  };
+  Array.from(sel.options).forEach(opt => {
+    const v = opt.value;
+    if (v === 'all') return;
+    opt.disabled = disabled.includes(v);
+    opt.style.color = disabled.includes(v) ? 'var(--text-dim)' : '';
+    opt.title = disabled.includes(v) ? (TOOLTIPS[v] || '') : '';
+  });
+  // 若目前選中的學制被反灰，自動重置為 all
+  if (disabled.includes(sel.value)) {
+    sel.value = 'all';
+  }
+}
+
+/** 規則二：鎖定課程類型 */
+function _applyTypeLockedState(program) {
+  const sel = document.getElementById('aFilterType');
+  if (!sel) return;
+  const noLab = ['2yr_gen','2yr_work','2yr_night','retake_class'];
+  if (noLab.includes(program)) {
+    // 鎖定正課
+    sel.value = 'theory';
+    Array.from(sel.options).forEach(opt => {
+      opt.disabled = opt.value === 'practicum';
+      opt.title    = opt.value === 'practicum' ? '此學制不開設實驗課' : '';
+    });
+  } else {
+    Array.from(sel.options).forEach(opt => { opt.disabled = false; opt.title = ''; });
+  }
+}
+
+/**
+ * 規則三：重建班級清單（含筆數）
+ * 回傳被重置的欄位名稱（用於規則四提示）
+ */
+function _rebuildSheetOptions(sem, program, courseType, changedField) {
+  const el = document.getElementById('aFilterSheet');
+  const prevSheet = el.value;
+  const resetFields = [];
+
+  // 從 class_summary 動態統計可用班級與筆數
+  const sheetCountMap = {};
+  Object.values(DATA.class_summary).forEach(c => {
+    if (sem !== 'all' && c.semester !== sem) return;
+    if (courseType !== 'all' && c.type !== courseType) return;
+    const prog = classInfo(c.sheet_name, c.semester).program;
+    if (program !== 'all' && prog !== program) return;
+    const sn = c.sheet_name;
+    sheetCountMap[sn] = (sheetCountMap[sn] || 0) + (c.count || 0);
+  });
+
+  const sheets = sortSheetNames(Object.keys(sheetCountMap));
+
+  el.innerHTML = `<option value="all">全部班級 All</option>` +
+    sheets.map(s => {
+      const cnt = sheetCountMap[s];
+      const label = cnt ? `${s}（${cnt}人）` : s;
+      return `<option value="${escapeHtml(s)}">${escapeHtml(label)}</option>`;
+    }).join('');
+
+  // 若之前選的班級不在新清單，重置並記錄
+  if (prevSheet !== 'all' && !sheets.includes(prevSheet)) {
+    el.value = 'all';
+    if (changedField !== 'class') resetFields.push('班級');
+  } else {
+    el.value = prevSheet;
+  }
+
+  return resetFields;
+}
+
+/** 規則四：顯示重置提示 */
+function _showAResetHint(changedField, resetFields) {
+  const FIELD_LABELS = { semester:'學期', program:'學制', courseType:'課程類型', class:'班級' };
+  const hint = document.getElementById('aResetHint');
+  const text = document.getElementById('aResetHintText');
+  if (!hint || !text) return;
+  text.textContent =
+    `已自動調整：${resetFields.join('、')} 已重置（因 ${FIELD_LABELS[changedField] || changedField} 變更）`;
+  hint.style.display = 'flex';
+}
+
+function _hideAResetHint() {
+  const hint = document.getElementById('aResetHint');
+  if (hint) hint.style.display = 'none';
+}
+
+/** 復原按鈕：還原到上次快照 */
+function undoAFilterReset() {
+  if (!_aFilterSnapshot) return;
+  const { sem, program, courseType, sheet } = _aFilterSnapshot;
+  document.getElementById('aFilterSem').value    = sem;
+  document.getElementById('aFilterProgram').value = program;
+  document.getElementById('aFilterType').value    = courseType;
+  _rebuildSheetOptions(sem, program, courseType, 'class');
+  document.getElementById('aFilterSheet').value   = sheet;
+  _applyProgramDisabledState(sem);
+  _applyTypeLockedState(program);
+  _hideAResetHint();
+  _hideAEmptyHint();
+  renderA();
+}
+
+/** 清除所有條件 */
+function resetAFilters() {
+  document.getElementById('aFilterSem').value     = 'all';
+  document.getElementById('aFilterProgram').value  = 'all';
+  document.getElementById('aFilterType').value     = 'all';
+  _applyProgramDisabledState('all');
+  _applyTypeLockedState('all');
+  _rebuildSheetOptions('all','all','all','semester');
+  _hideAResetHint();
+  _hideAEmptyHint();
+  renderA();
+}
+
+/** 防空值提示 */
+function _showAEmptyHint(reason) {
+  const el = document.getElementById('aEmptyHint');
+  if (!el) return;
+  el.textContent = `⚠ 查無資料：${reason}`;
+  el.style.display = 'block';
+}
+
+function _hideAEmptyHint() {
+  const el = document.getElementById('aEmptyHint');
+  if (el) el.style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════════
 // PANEL A
 // ══════════════════════════════════════════════════════════
 function renderA() {
-  const sheet = updateSheetFilter();  // 修正 B2：直接使用回傳值，避免時序問題
+  const sheet = document.getElementById('aFilterSheet').value;
   const sem   = document.getElementById('aFilterSem').value;
   const type  = document.getElementById('aFilterType').value;
   const cls   = getClassSummary(sem, sheet, type);
@@ -3329,29 +3673,203 @@ function getRetakerRecords() {
 // ══════════════════════════════════════════════════════════
 
 // 全域狀態
-let cCurrentView = 'general';   // 'general' | 'retake'
-let cCurrentExam = 'semester_score';  // 'semester_score' | 'midterm' | 'final'
+let cCurrentView = 'general';        // 'general' | 'retake'
+let cCurrentExam = 'semester_score'; // 'semester_score' | 'midterm' | 'final'
+let cCurrentType = 'all';            // 'all' | 'theory' | 'practicum'
+let cCurrentPass = 'all';            // 'all' | 'pass' | 'fail'
 
-/* 切換族群視圖 */
+// ── 模式切換（整組篩選器替換） ─────────────────────────────
 function switchCView(view) {
   cCurrentView = view;
-  document.querySelectorAll('.seg-btn').forEach(b =>
+
+  // 切換 seg-btn active
+  document.querySelectorAll('#cViewControls .seg-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.view === view)
   );
-  document.getElementById('cPanelGeneral').style.display = view === 'general' ? '' : 'none';
-  document.getElementById('cPanelRetake').style.display  = view === 'retake'  ? '' : 'none';
+
+  // 整組篩選器替換
+  const isGeneral = view === 'general';
+  document.getElementById('cFilterGeneral').style.display = isGeneral ? '' : 'none';
+  document.getElementById('cFilterRetake').style.display  = isGeneral ? 'none' : '';
+  document.getElementById('cResetBtn').style.display      = isGeneral ? '' : 'none';
+
+  // 切換時清除所有已選條件（規格書：切換時清除所有）
+  if (isGeneral) {
+    _resetCGeneralFilters();
+  } else {
+    _resetCRetakeFilters();
+    // 重修模式初始：等待學號輸入，面板顯示提示
+    document.getElementById('cPanelRetake').style.display  = '';
+    document.getElementById('cPanelGeneral').style.display = 'none';
+    document.getElementById('cStats').innerHTML = '';
+    document.getElementById('bStats').innerHTML = '';
+    return;  // 重修模式不主動 render，等學號輸入
+  }
+
+  document.getElementById('cPanelGeneral').style.display = '';
+  document.getElementById('cPanelRetake').style.display  = 'none';
   renderCView();
 }
 
-/* 切換評量指標 */
+// ── 全體學生篩選器連動 ────────────────────────────────────
+function onCGeneralFilterChange(changedField) {
+  const sem     = document.getElementById('cFilterSem').value;
+  const program = document.getElementById('cFilterProgram').value;
+
+  // 規則二：課程類型鎖定（不開實驗課的學制）
+  const noLab = ['2yr_gen','2yr_work','2yr_night','retake_class'];
+  const lockHint = document.getElementById('cTypeLockHint');
+  if (noLab.includes(program)) {
+    cCurrentType = 'theory';
+    ['cTypeAll','cTypeTheory','cTypePrac'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.classList.toggle('active', id === 'cTypeTheory');
+      if (id === 'cTypePrac') { btn.disabled = true; btn.style.opacity = '0.4'; }
+      else { btn.disabled = false; btn.style.opacity = ''; }
+    });
+    if (lockHint) {
+      lockHint.textContent = `此學制不開設實驗課，課程類型已鎖定為正課`;
+      lockHint.style.display = 'block';
+    }
+  } else {
+    ['cTypeAll','cTypeTheory','cTypePrac'].forEach(id => {
+      const btn = document.getElementById(id);
+      if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+    });
+    if (lockHint) lockHint.style.display = 'none';
+  }
+
+  _hideCEmptyHint();
+  renderCView();
+}
+
+function setCType(type) {
+  cCurrentType = type;
+  ['cTypeAll','cTypeTheory','cTypePrac'].forEach(id => {
+    const map = { cTypeAll:'all', cTypeTheory:'theory', cTypePrac:'practicum' };
+    document.getElementById(id)?.classList.toggle('active', map[id] === type);
+  });
+  renderCView();
+}
+
+function setCPass(pass) {
+  cCurrentPass = pass;
+  ['cPassAll','cPassPass','cPassFail'].forEach(id => {
+    const map = { cPassAll:'all', cPassPass:'pass', cPassFail:'fail' };
+    document.getElementById(id)?.classList.toggle('active', map[id] === pass);
+  });
+  renderCView();
+}
+
 function setCExam(metric) {
   cCurrentExam = metric;
-  ['cExamSem','cExamMid','cExamFin'].forEach(id =>
-    document.getElementById(id)?.classList.remove('active')
-  );
-  const map = { semester_score:'cExamSem', midterm:'cExamMid', final:'cExamFin' };
-  document.getElementById(map[metric])?.classList.add('active');
+  // 同步兩組評量按鈕（全體模式 + 重修模式）
+  ['cExamSem','cExamMid','cExamFin','cExamSemR','cExamMidR','cExamFinR'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
+  const map = {
+    semester_score: ['cExamSem','cExamSemR'],
+    midterm:        ['cExamMid','cExamMidR'],
+    final:          ['cExamFin','cExamFinR'],
+  };
+  (map[metric] || []).forEach(id => document.getElementById(id)?.classList.add('active'));
   renderCView();
+}
+
+function resetCFilters() {
+  _resetCGeneralFilters();
+  renderCView();
+}
+
+function _resetCGeneralFilters() {
+  const semEl = document.getElementById('cFilterSem');
+  if (semEl) semEl.value = 'all';
+  const progEl = document.getElementById('cFilterProgram');
+  if (progEl) progEl.value = 'all';
+  cCurrentType = 'all';
+  cCurrentPass = 'all';
+  // 重置按鈕 active 狀態
+  ['cTypeAll','cTypeTheory','cTypePrac'].forEach((id,i) =>
+    document.getElementById(id)?.classList.toggle('active', i===0));
+  ['cPassAll','cPassPass','cPassFail'].forEach((id,i) =>
+    document.getElementById(id)?.classList.toggle('active', i===0));
+  // 解鎖課程類型
+  ['cTypePrac'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  });
+  const lockHint = document.getElementById('cTypeLockHint');
+  if (lockHint) lockHint.style.display = 'none';
+  _hideCEmptyHint();
+}
+
+function _resetCRetakeFilters() {
+  const inp = document.getElementById('cSearchRetake');
+  if (inp) inp.value = '';
+  const box = document.getElementById('searchResultsRetake');
+  if (box) { box.classList.remove('open'); box.innerHTML = ''; }
+}
+
+// ── 重修模式：搜尋學號（必填） ────────────────────────────
+function onCRetakeSearch() {
+  const q = document.getElementById('cSearchRetake')?.value?.trim() || '';
+  const box = document.getElementById('searchResultsRetake');
+  const hint = document.getElementById('cRetakeSearchHint');
+
+  if (q.length < 2) {
+    if (box) { box.classList.remove('open'); box.innerHTML = ''; }
+    if (hint) hint.style.display = '';
+    return;
+  }
+  if (hint) hint.style.display = 'none';
+
+  // 複用 searchStudent 的比對邏輯，但輸出到 retake 下拉
+  const results = [];
+  const pat = q.replace(/\*/g, '.*').replace(/\?/g, '.');
+  let re;
+  try { re = new RegExp(pat, 'i'); } catch { re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i'); }
+
+  Object.entries(DATA.students).forEach(([sid, s]) => {
+    if (!s.records.some(r => r.is_retaker)) return; // 只搜有重修記錄的學生
+    if (re.test(sid) || re.test(s.name_masked || '')) results.push({ id: sid, masked: s.name_masked });
+  });
+
+  if (!box) return;
+  if (!results.length) {
+    box.innerHTML = '<div class="no-result">查無重修學生（學號片段不符或無重修記錄）</div>';
+    box.classList.add('open');
+    return;
+  }
+
+  box.innerHTML = results.slice(0, 12).map(r =>
+    `<div class="result-item" onclick="selectRetakeStudent('${escapeHtml(r.id)}')">
+       <span class="result-id">${escapeHtml(r.id)}</span>
+       <span class="result-name">${escapeHtml(r.masked || '–')}</span>
+     </div>`
+  ).join('');
+  box.classList.add('open');
+}
+
+function selectRetakeStudent(sid) {
+  const inp = document.getElementById('cSearchRetake');
+  if (inp) inp.value = sid;
+  const box = document.getElementById('searchResultsRetake');
+  if (box) box.classList.remove('open');
+  // 顯示個案資料（複用 selectStudent 邏輯）
+  selectStudent(sid);
+  // 同時 render 重修圖表
+  renderCView();
+}
+
+// ── 防空值提示 ──────────────────────────────────────────
+function _showCEmptyHint(reason) {
+  const el = document.getElementById('cEmptyHint');
+  if (el) { el.textContent = `⚠ 查無資料：${reason}`; el.style.display = 'block'; }
+}
+function _hideCEmptyHint() {
+  const el = document.getElementById('cEmptyHint');
+  if (el) el.style.display = 'none';
 }
 
 /* 依目前視圖重繪 */
@@ -3361,8 +3879,11 @@ function renderCView() {
     renderCAnomalyAndDist();
     renderCStats();
   } else {
-    renderCRetakeStats();   // 頂端統計卡
-    renderB();              // 重修圖表主體
+    // 重修模式：若無學號輸入，不繪圖
+    const retakeId = document.getElementById('cSearchRetake')?.value?.trim() || '';
+    if (!retakeId) return;
+    renderCRetakeStats();
+    renderB();
     renderRetakerFirstDist();
   }
 }
@@ -3371,59 +3892,58 @@ function renderCView() {
 function initCPanel() {
   if (!DATA) return;
   populateCYearFilter();
-  setBType('theory');   // 初始化重修視圖的課程類型按鈕 active 狀態
+  populateCFilterSem();      // ← Phase 4 新增：初始化學期選單
+  setBType('theory');
+  _resetCGeneralFilters();
   renderCView();
-  // 只在尚未有真實個案結果時才顯示 empty state
   const pw = document.getElementById('profileWrap');
-  if (pw && !pw.querySelector('[data-student-profile]')) {
-    pw.innerHTML = '';
-  }
+  if (pw && !pw.querySelector('[data-student-profile]')) pw.innerHTML = '';
 }
 
-/* 建立學年度選單（依 meta.semesters，分組折疊為學年） */
+/* 初始化全體學生模式的學期選單 */
+function populateCFilterSem() {
+  const sel = document.getElementById('cFilterSem');
+  if (!sel || !DATA) return;
+  const sems = [...DATA.meta.semesters].sort((a,b) => Number(b)-Number(a));
+  sel.innerHTML = '<option value="all">全部學期 All</option>' +
+    sems.map(s => `<option value="${s}">${semLabel(s)}</option>`).join('');
+}
+
+/* 建立學年度選單（向後相容，仍保留 cFilterYear 供 getCFilteredRecords 使用） */
 function populateCYearFilter() {
+  // cFilterYear 在 Phase 4 DOM 中已移除，此函式保持空實作避免呼叫錯誤
   const sel = document.getElementById('cFilterYear');
   if (!sel || !DATA) return;
-  const prevVal = sel.value; // 保留使用者已選的值
-  // 統一轉為字串，避免 JSON 數字與 select.value 字串比較失誤
   const sems = (DATA.meta.semesters || []).map(String);
-
-  // 收集所有學年（取學期前3碼）
   const years = [...new Set(sems.map(s => s.slice(0,3)))].sort((a,b) => b-a);
-
-  // 建立 optgroup，每學年含第1、第2學期
   let html = '<option value="all">全部學年</option>';
   years.forEach(yr => {
-    const label = `${yr} 學年度`;
-    const sem1 = yr + '1';
-    const sem2 = yr + '2';
-    const avail1 = sems.includes(sem1);
-    const avail2 = sems.includes(sem2);
-    html += `<optgroup label="${label}">`;
-    if (avail1) html += `<option value="${sem1}">${yr}(1) 第一學期</option>`;
-    if (avail2) html += `<option value="${sem2}">${yr}(2) 第二學期</option>`;
+    const sem1 = yr+'1', sem2 = yr+'2';
+    html += `<optgroup label="${yr} 學年度">`;
+    if (sems.includes(sem1)) html += `<option value="${sem1}">${yr}(1)</option>`;
+    if (sems.includes(sem2)) html += `<option value="${sem2}">${yr}(2)</option>`;
     html += `</optgroup>`;
   });
   sel.innerHTML = html;
-  // 還原上次選擇；若該學期已不存在則 fallback 'all'
-  if (prevVal && prevVal !== 'all' && sel.querySelector(`option[value="${prevVal}"]`)) {
-    sel.value = prevVal;
-  }
 }
 
-/* 取得目前 C 篩選條件下的 records */
+/* 取得目前 C 篩選條件下的 records（Phase 4 更新：讀 cFilterSem 而非 cFilterYear） */
 function getCFilteredRecords() {
   if (!DATA) return [];
-  const yearVal = document.getElementById('cFilterYear')?.value || 'all';
+  const semVal  = document.getElementById('cFilterSem')?.value  || 'all';
   const progVal = document.getElementById('cFilterProgram')?.value || 'all';
+  const typeVal = cCurrentType;
+  const passVal = cCurrentPass;
 
   const result = [];
   Object.values(DATA.students).forEach(stu => {
     stu.records.forEach(r => {
-      // 學年度篩選
-      if (yearVal !== 'all' && String(r.semester) !== String(yearVal)) return;
-      // 學制篩選（對齊 classInfo().program）
-      if (progVal !== 'all' && classInfo(r.sheet_name || '', r.semester).program !== progVal) return;
+      if (semVal  !== 'all' && String(r.semester) !== String(semVal))  return;
+      if (progVal !== 'all' && classInfo(r.sheet_name||'', r.semester).program !== progVal) return;
+      if (typeVal !== 'all' && r.type !== typeVal) return;
+      const score = r[cCurrentExam];
+      if (passVal === 'pass' && (score == null || score < 60)) return;
+      if (passVal === 'fail' && (score == null || score >= 60)) return;
       result.push({ ...r, masked: stu.name_masked });
     });
   });
@@ -4568,11 +5088,156 @@ function metricField(m) {
   return { semester_score:'avg_semester', midterm:'avg_midterm', final:'avg_final' }[m] || m;
 }
 
+// ══════════════════════════════════════════════════════════
+// PANEL D — 學期雙模選擇器
+// ══════════════════════════════════════════════════════════
+
+/** 初始化學期篩選器（loadData → init 後呼叫） */
+function initDSemFilter() {
+  if (!DATA) return;
+  const sems = DATA.meta.semesters;
+  const maxIdx = sems.length - 1;
+
+  // 初始化滑桿 max
+  document.getElementById('dSemStart').max = maxIdx;
+  document.getElementById('dSemEnd').max   = maxIdx;
+  document.getElementById('dSemStart').value = 0;
+  document.getElementById('dSemEnd').value   = maxIdx;
+  dSemRange = [0, maxIdx];
+
+  // 生成膠囊
+  const wrap = document.getElementById('dSemMultiWrap');
+  wrap.innerHTML = sems.map(s => `
+    <button class="sem-capsule" data-sem="${escapeHtml(s)}"
+            onclick="toggleDSemCapsule(this)"
+            style="padding:3px 10px;border-radius:14px;border:1px solid var(--border2);
+                   background:var(--surface2);color:var(--text-dim);font-size:10px;
+                   font-family:'JetBrains Mono',monospace;cursor:pointer;transition:all 0.15s">
+      ${semLabel(s)}
+    </button>`).join('');
+
+  _updateDSemRangeLabel();
+}
+
+/** 切換範圍 / 多選模式 */
+function setDSemMode(mode) {
+  dSemMode = mode;
+  document.getElementById('dSemModeRange').classList.toggle('active', mode === 'range');
+  document.getElementById('dSemModeMulti').classList.toggle('active', mode === 'multi');
+  document.getElementById('dSemRangeWrap').style.display  = mode === 'range' ? 'flex'   : 'none';
+  document.getElementById('dSemMultiWrap').style.display  = mode === 'multi' ? 'flex'   : 'none';
+  document.getElementById('dSemMultiCount').style.display = mode === 'multi' ? 'inline' : 'none';
+
+  // 多選模式：若尚無已選，自動選最近 3 個學期
+  if (mode === 'multi' && dSemSelected.size === 0 && DATA) {
+    const sems = DATA.meta.semesters;
+    sems.slice(-3).forEach(s => dSemSelected.add(s));
+    _syncCapsuleStyles();
+  }
+
+  // 更新模式提示
+  const hint = document.getElementById('dModeHint');
+  if (mode === 'multi') {
+    hint.innerHTML = '📊 <strong style="color:var(--accent)">多選模式</strong> — 點選學期膠囊（最多 5 個）進行並排長條圖比較。';
+  } else {
+    hint.innerHTML = '📈 <strong style="color:var(--accent)">範圍模式</strong> — 顯示連續趨勢折線；超過 6 個學制時自動合併為總平均。';
+  }
+
+  // 圖表切換
+  document.getElementById('dProgramBarWrap').style.display = mode === 'multi' ? 'block' : 'none';
+  document.getElementById('dPassRateWrap').style.display   = mode === 'range' ? 'block' : 'none';
+
+  renderD();
+}
+
+/** 滑桿變動事件 */
+function onDSemRangeChange() {
+  let start = parseInt(document.getElementById('dSemStart').value, 10);
+  let end   = parseInt(document.getElementById('dSemEnd').value, 10);
+  // 確保 start ≤ end
+  if (start > end) {
+    const src = event?.target?.id;
+    if (src === 'dSemStart') { start = end; document.getElementById('dSemStart').value = start; }
+    else { end = start; document.getElementById('dSemEnd').value = end; }
+  }
+  dSemRange = [start, end];
+  _updateDSemRangeLabel();
+  renderD();
+}
+
+/** 膠囊點擊切換（最多 5 個） */
+function toggleDSemCapsule(btn) {
+  const sem = btn.dataset.sem;
+  if (dSemSelected.has(sem)) {
+    dSemSelected.delete(sem);
+  } else {
+    if (dSemSelected.size >= 5) {
+      // 移除最舊的（Set 保留插入順序）
+      const first = dSemSelected.values().next().value;
+      dSemSelected.delete(first);
+    }
+    dSemSelected.add(sem);
+  }
+  _syncCapsuleStyles();
+  _updateMultiCount();
+  renderD();
+}
+
+/** 取得目前學期篩選後的 semesters 清單（傳入 renderD 使用） */
+function getDSemList() {
+  if (!DATA) return [];
+  const sems = DATA.meta.semesters;
+  if (dSemMode === 'range') {
+    return sems.slice(dSemRange[0], dSemRange[1] + 1);
+  }
+  // 多選：依原始順序回傳已選學期
+  return sems.filter(s => dSemSelected.has(s));
+}
+
+// ── 內部輔助 ──────────────────────────────────────────────
+function _updateDSemRangeLabel() {
+  if (!DATA) return;
+  const sems = DATA.meta.semesters;
+  const [si, ei] = dSemRange;
+  const count = ei - si + 1;
+  document.getElementById('dSemRangeLabel').textContent =
+    `${semLabel(sems[si])} – ${semLabel(sems[ei])}`;
+  document.getElementById('dSemRangeCount').textContent = `${count} 個學期`;
+
+  // 各班獨立模式：超過 6 學制時自動切回合併並提示
+  if (dView === 'class' && count > 12) {
+    // 資料點太多時降噪：強制顯示提示（不強制切模式，讓使用者決定）
+    document.getElementById('dSemRangeCount').innerHTML =
+      `${count} 個學期 <span style="color:var(--accent3)">⚠ 各班獨立模式下線條可能過多</span>`;
+  }
+}
+
+function _syncCapsuleStyles() {
+  document.querySelectorAll('#dSemMultiWrap .sem-capsule').forEach(btn => {
+    const active = dSemSelected.has(btn.dataset.sem);
+    btn.style.background    = active ? 'var(--accent)'    : 'var(--surface2)';
+    btn.style.color         = active ? '#fff'             : 'var(--text-dim)';
+    btn.style.borderColor   = active ? 'var(--accent)'    : 'var(--border2)';
+    btn.style.fontWeight    = active ? '700'              : '400';
+  });
+}
+
+function _updateMultiCount() {
+  document.getElementById('dSemMultiCount').textContent =
+    `已選 ${dSemSelected.size} / 5 個學期`;
+}
+
 function renderD() {
   if (!DATA) return;
 
   const filterProg = document.getElementById('dFilterProgram').value;
-  const sems = DATA.meta.semesters;
+  const sems = getDSemList();  // ← 改用雙模篩選後的學期清單
+
+  if (sems.length === 0) {
+    document.getElementById('dStats').innerHTML =
+      '<div class="empty-state" style="padding:16px;color:var(--text-dim)">請至少選擇一個學期</div>';
+    return;
+  }
 
   // 正課 vs 實驗課：依 dType 過濾（比較基準一致）
   // 正課 type 值為 'theory'（或 etl 產生的對應值），實驗課為 'practicum'
@@ -4627,18 +5292,22 @@ function renderD() {
     '【' + (dType === 'practicum' ? '實驗課' : '正課') + '】' +
     ' — ' + metricLabel(dMetric) + ' 跨學期趨勢';
 
-  // ── 折線圖：跨學期趨勢 ──
+  // ── 折線圖：跨學期趨勢（兩種模式共用，行為不同） ──
   if (dView === 'merge') {
     renderDTrendMerge(filtered, sems);
   } else {
     renderDTrendClass(filtered, sems);
   }
 
-  // ── 長條圖：學制橫向比較 ──
-  renderDProgramBar(allClasses, sems, filterProg);
-
-  // ── 及格率比較 ──
-  renderDPassRate(allClasses, sems, filterProg);
+  // ── 依模式分流圖表 ──
+  if (dSemMode === 'multi') {
+    // 多選模式：分組長條圖 + 並排及格率長條
+    renderDProgramBar(allClasses, sems, filterProg);
+    renderDPassRateBar(allClasses, sems, filterProg);
+  } else {
+    // 範圍模式：及格率趨勢折線
+    renderDPassRateLine(allClasses, sems, filterProg);
+  }
 
   // ── 明細表格 ──
   const tableCard = document.getElementById('dClassTable');
@@ -4735,7 +5404,17 @@ function renderDTrendMerge(filtered, sems) {
 
 function renderDTrendClass(filtered, sems) {
   // 各班獨立模式：每班一條線
+  // 安全上限：超過 18 條線自動降級為合併模式並提示
   const classes = sortSheetNames([...new Set(filtered.map(c => c.sheet_name))]);
+  const MAX_LINES = 18;
+
+  if (classes.length > MAX_LINES) {
+    document.getElementById('dModeHint').innerHTML =
+      `⚠️ 各班獨立模式：班級數（${classes.length}）超過上限（${MAX_LINES}），` +
+      `已自動切換為 <strong style="color:var(--accent)">合併總平均</strong>。請縮小學期範圍或指定學制。`;
+    renderDTrendMerge(filtered, sems);
+    return;
+  }
 
   const datasets = classes.map(cls => {
     const prog = filtered.find(c => c.sheet_name === cls)?.program || '2yr_gen';
@@ -4824,7 +5503,8 @@ function renderDProgramBar(allClasses, sems, filterProg) {
   });
 }
 
-function renderDPassRate(allClasses, sems, filterProg) {
+/** 範圍模式：及格率趨勢折線（canvas: chartPassRateRange） */
+function renderDPassRateLine(allClasses, sems, filterProg) {
   const programs = filterProg === 'all'
     ? PROGRAM_ORDER
     : PROGRAM_ORDER.filter(p => p === filterProg);
@@ -4842,14 +5522,11 @@ function renderDPassRate(allClasses, sems, filterProg) {
       data,
       borderColor: PROGRAM_COLORS[prog],
       backgroundColor: PROGRAM_COLORS[prog] + '20',
-      tension: 0.3,
-      fill: false,
-      pointRadius: 4,
-      spanGaps: true,
+      tension: 0.3, fill: false, pointRadius: 4, spanGaps: true,
     };
   });
 
-  mkChart('chartPassRate', {
+  mkChart('chartPassRateRange', {
     type: 'line',
     data: { labels: sems.map(semLabel), datasets },
     options: {
@@ -4869,6 +5546,61 @@ function renderDPassRate(allClasses, sems, filterProg) {
       }
     }
   });
+}
+
+/** 多選模式：及格率並排長條（canvas: chartPassRate） */
+function renderDPassRateBar(allClasses, sems, filterProg) {
+  const programs = filterProg === 'all'
+    ? PROGRAM_ORDER.filter(p => allClasses.some(c => c.program === p))
+    : PROGRAM_ORDER.filter(p => p === filterProg);
+
+  const datasets = programs.map(prog => {
+    const data = sems.map(sem => {
+      const cls = allClasses.filter(c => c.semester === sem && c.program === prog);
+      const vals = cls.map(c => c.pass_rate).filter(v => v != null);
+      return vals.length
+        ? +((vals.reduce((a, b) => a + b, 0) / vals.length) * 100).toFixed(1)
+        : null;
+    });
+    return {
+      label: PROGRAM_LABELS[prog],
+      data,
+      backgroundColor: PROGRAM_COLORS[prog] + 'bb',
+      borderColor: PROGRAM_COLORS[prog],
+      borderWidth: 1, borderRadius: 3,
+    };
+  });
+
+  mkChart('chartPassRate', {
+    type: 'bar',
+    data: { labels: sems.map(semLabel), datasets },
+    options: {
+      ...CHART_DEFAULTS,
+      plugins: {
+        ...CHART_DEFAULTS.plugins,
+        legend: { labels: { color: 'var(--text-dim)', font: { size: 9 }, boxWidth: 10 } },
+        tooltip: {
+          ...CHART_DEFAULTS.plugins.tooltip,
+          callbacks: { label: ctx => `${ctx.dataset.label}：${ctx.raw ?? '–'}%` }
+        },
+        subtitle: {
+          display: true,
+          text: `${sems.length} 個學期並排及格率比較`,
+          color: 'var(--text-dim)', font: { size: 10 }, padding: { bottom: 4 }
+        }
+      },
+      scales: {
+        x: { ...CHART_DEFAULTS.scales.x },
+        y: { ...CHART_DEFAULTS.scales.y, min: 0, max: 100,
+          title: { display: true, text: '及格率 %', color: 'var(--text-dim)' } }
+      }
+    }
+  });
+}
+
+// 向後相容橋接（舊呼叫 renderDPassRate → 導向範圍模式折線）
+function renderDPassRate(allClasses, sems, filterProg) {
+  renderDPassRateLine(allClasses, sems, filterProg);
 }
 
 function renderDTable(filtered) {
