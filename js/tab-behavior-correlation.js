@@ -2,6 +2,14 @@
  * tab-behavior-correlation.js
  * 相關性分析 Tab — Pearson 熱力圖 + 散佈圖
  * 依賴：Chart.js (scatter)、behavior-loader.js
+ *
+ * FIXED (2025-05):
+ *   BUG1 — _applyFiltersAndRender 覆蓋 _corrData.scatter_data，
+ *           導致篩選基底被污染；改以 _lastFiltered 傳遞給下游，不再動 _corrData。
+ *   BUG2 — _scatterRows 直接讀 _corrData.scatter_data 而非篩選後資料；
+ *           改為接受 rows 參數，fallback 順序：rows → _lastFiltered → _allScatterData。
+ *   BUG3 — setCorrType 只呼叫 _renderHeatmap，未同步更新散佈圖；
+ *           改呼叫 _applyFiltersAndRender 確保全部元件連動。
  */
 
 const BehaviorCorrelationTab = (() => {
@@ -106,8 +114,11 @@ const BehaviorCorrelationTab = (() => {
     return Object.keys(p);
   }
 
-  function _scatterRows(feat, target) {
-    const raw = _corrData?.scatter_data || [];
+  // ── FIX BUG1/BUG2：_scatterRows 改接受外部 rows 參數 ────
+  // 讀取順序：傳入的 rows → _lastFiltered（篩選快取）→ _allScatterData → 原始資料
+  // 不再讀 _corrData.scatter_data，避免被 _applyFiltersAndRender 覆蓋後污染基底。
+  function _scatterRows(feat, target, rows) {
+    const raw = rows ?? _lastFiltered ?? _allScatterData ?? _corrData?.scatter_data ?? [];
     if (Array.isArray(raw)) {
       return raw
         .map(row => ({
@@ -374,16 +385,14 @@ const BehaviorCorrelationTab = (() => {
     btnS.style.cssText = `font-size:.76rem;padding:3px 9px;border-radius:0 6px 6px 0;border:1px solid ${ac};background:${ip ? "transparent" : ac};color:${ip ? ac : "#fff"};cursor:pointer;font-family:inherit;font-weight:${ip ? "400" : "700"}`;
   }
 
+  // ── FIX BUG3：setCorrType 改呼叫 _applyFiltersAndRender ──
+  // 原本只呼叫 _renderHeatmap + 條件式 showScatter，
+  // 切換方法時散佈圖不會連動更新篩選後的正確資料集。
   function setCorrType(type) {
     _corrType = type;
-    _lastFilterKey = null;   // 切換相關係數方法時強制重新過濾，確保 scatter 與熱力圖同步
+    _lastFilterKey = null;   // 強制清快取，確保重新過濾
     _updateCorrTypeButtons();
-    _renderHeatmap("corrHeatmap");
-
-    // 確保 tooltip 中的 r/ρ 標籤與目前選擇方法一致。
-    if (_currentTarget) {
-      showScatter(_currentTarget.feat, _currentTarget.gradeCol);
-    }
+    _applyFiltersAndRender("corrHeatmap", "scatterSection");
   }
 
   function onFilterChange() {
@@ -442,6 +451,9 @@ const BehaviorCorrelationTab = (() => {
     return _lastFiltered;
   }
 
+  // ── FIX BUG1：移除 _corrData 覆蓋，改以 filtered 傳遞給下游 ──
+  // 原本 `_corrData = { ..._corrData, scatter_data: filtered }` 會
+  // 覆蓋原始資料，導致下次篩選的基底已是上次的子集，篩選無法還原全量。
   function _applyFiltersAndRender(heatmapId, scatterWrapperId) {
     const filtered = _filteredScatterData();
     const count = Array.isArray(filtered) ? filtered.length : "—";
@@ -449,12 +461,10 @@ const BehaviorCorrelationTab = (() => {
     const countEl = document.getElementById("corrFilterCount");
     if (countEl) countEl.textContent = `共 ${count} 筆`;
 
-    // 矩陣直接沿用 ETL 預算值（pearson / spearman）；
-    // 僅更新 scatter_data 供散佈圖使用
-    _corrData = { ..._corrData, scatter_data: filtered };
-
+    // 熱力圖沿用 ETL 預算值（pearson / spearman），不受篩選影響
     _renderHeatmap(heatmapId);
-    _renderScatterSelector(scatterWrapperId);
+    // 散佈圖傳入篩選後資料，不修改 _corrData
+    _renderScatterSelector(scatterWrapperId, filtered);
     _renderLaggedSection(scatterWrapperId);
   }
 
@@ -693,14 +703,17 @@ const BehaviorCorrelationTab = (() => {
 
   // ── 散佈圖選擇器 ─────────────────────────────────────────
 
-  function _renderScatterSelector(wrapperId) {
+  // ── FIX BUG1/BUG2：接受 filteredRows 參數，不讀 _corrData.scatter_data ──
+  function _renderScatterSelector(wrapperId, filteredRows) {
     const el = document.getElementById(wrapperId);
     if (!el || !_corrData) return;
 
-    const scatterData = _corrData.scatter_data || [];
+    // 以傳入的篩選資料判斷是否有資料可顯示
+    const scatterData = filteredRows ?? _lastFiltered ?? _allScatterData ?? _corrData.scatter_data ?? [];
     const hasScatterData = Array.isArray(scatterData)
       ? scatterData.length > 0
       : Object.keys(scatterData).length > 0;
+
     if (!hasScatterData) {
       const noDataReason = (_filterCluster !== "all")
         ? `分群 ${_filterCluster} 在本相關性資料集中無對應學生（兩資料集學生母體不同）`
@@ -718,13 +731,13 @@ const BehaviorCorrelationTab = (() => {
       </div>`;
 
     if (Array.isArray(scatterData)) {
-      const firstFeat = (_features())[0];
+      const firstFeat   = (_features())[0];
       const firstTarget = (_targets())[0];
-      if (firstFeat && firstTarget) showScatter(firstFeat, firstTarget);
+      if (firstFeat && firstTarget) showScatter(firstFeat, firstTarget, scatterData);
     } else {
       const firstKey                = Object.keys(scatterData)[0];
       const [featPart, , gradePart] = firstKey.split("_vs_");
-      showScatter(featPart, gradePart || "grade_total");
+      showScatter(featPart, gradePart || "grade_total", null);
     }
   }
 
@@ -754,11 +767,12 @@ const BehaviorCorrelationTab = (() => {
              yAtMax: slope * xMax + intercept };
   }
 
-  function showScatter(feat, gradeCol) {
+  // ── FIX BUG2：showScatter 加 rows 參數，傳給 _scatterRows ──
+  function showScatter(feat, gradeCol, rows) {
     if (!_corrData) return;
     _currentTarget = { feat, gradeCol };
 
-    const raw    = _scatterRows(feat, gradeCol);
+    const raw    = _scatterRows(feat, gradeCol, rows);
     const r      = _pearson(feat, gradeCol);
     const rLabel = r != null ? ` (r = ${r >= 0 ? "+" : ""}${r.toFixed(3)})` : "";
 
