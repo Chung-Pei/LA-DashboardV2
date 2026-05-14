@@ -1881,7 +1881,17 @@ body.light .subject-input {
         </div>
       </div>
 
-      <h5 style="margin:0 0 12px;font-weight:600">📊 學習行為分析 <span style="font-size:0.8rem;color:var(--text-dim,#888);font-weight:400">Learning Behavior</span></h5>
+      <div style="display:flex;align-items:center;margin:0 0 12px;gap:8px">
+        <h5 style="margin:0;font-weight:600;flex:1">📊 學習行為分析 <span style="font-size:0.8rem;color:var(--text-dim,#888);font-weight:400">Learning Behavior</span></h5>
+        <button id="lResetBtn" onclick="if(window.BehaviorRadarTab&&BehaviorRadarTab.resetFilters)BehaviorRadarTab.resetFilters()"
+                style="padding:4px 12px;border-radius:6px;border:1px solid var(--border2);
+                       background:var(--surface2);color:var(--text-dim);font-size:10px;cursor:pointer;
+                       white-space:nowrap;flex-shrink:0;transition:all 0.15s"
+                onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+                onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text-dim)'">
+          ↺ 清除條件
+        </button>
+      </div>
       <div id="behaviorMetaStrip" style="display:none;margin:0 0 14px"></div>
 
       <!-- 子 Tab -->
@@ -1924,41 +1934,41 @@ body.light .subject-input {
         <!-- 洞察與建議面板（策略 B & C）由 tab-behavior-radar.js 動態渲染 -->
         <div id="radarInsightsPanel" style="display:none"></div>
         <!-- 分群說明 -->
-        <div style="margin-top:16px;overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+        <div style="margin-top:16px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:0.82rem">
             <thead>
               <tr style="background:var(--card-bg2,#f8f9fa)">
-                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">代碼</th>
-                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">名稱</th>
-                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">主要特徵</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">代碼</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">名稱</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">主要特徵</th>
               </tr>
             </thead>
             <tbody>
-              <tr><td style="padding:5px 10px">P1</td><td style="padding:5px 10px">影音輔導型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">VID 完成率 ≥ 50% 或 TUT 時間充足</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px">P2</td><td style="padding:5px 10px">彈性聽覺型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">AUD 完成率 ≥ 50%，較少使用影片</td></tr>
-              <tr><td style="padding:5px 10px">P3</td><td style="padding:5px 10px">平均使用型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">各類教材平均使用（預設分群）</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px">P4</td><td style="padding:5px 10px">題庫刷題型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">QUZ 作答次數多且佔整體比例高</td></tr>
-              <tr><td style="padding:5px 10px">P5</td><td style="padding:5px 10px">被動低參與型</td><td style="padding:5px 10px;color:var(--text-dim,#888)">總學習時間少、教材多樣性低</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap">P1</td><td style="padding:5px 10px;white-space:nowrap">影音輔導型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">VID 完成率 ≥ 50% 或 TUT 時間充足</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap">P2</td><td style="padding:5px 10px;white-space:nowrap">彈性聽覺型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">AUD 完成率 ≥ 50%，較少使用影片</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap">P3</td><td style="padding:5px 10px;white-space:nowrap">平均使用型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">各類教材平均使用（預設分群）</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap">P4</td><td style="padding:5px 10px;white-space:nowrap">題庫刷題型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">QUZ 作答次數多且佔整體比例高</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap">P5</td><td style="padding:5px 10px;white-space:nowrap">被動低參與型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">總學習時間少、教材多樣性低</td></tr>
             </tbody>
           </table>
         </div>
         <!-- 雷達圖維度說明 -->
-        <div style="margin-top:12px;overflow-x:auto">
-          <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+        <div style="margin-top:12px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:0.82rem">
             <thead>
               <tr style="background:var(--card-bg2,#f8f9fa)">
-                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">代碼</th>
-                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">項目</th>
-                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0)">含意</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">代碼</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">項目</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">含意</th>
               </tr>
             </thead>
             <tbody>
-              <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">AUD</td><td style="padding:5px 10px">聽覺教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">音檔、語音講解等聽覺教材的完成情形。</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">VID</td><td style="padding:5px 10px">影音教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">教學影片、EverCam 等影音教材的完成情形。</td></tr>
-              <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">TXT</td><td style="padding:5px 10px">文字教材</td><td style="padding:5px 10px;color:var(--text-dim,#888)">講義、參考教材、延伸閱讀等文字資源的完成情形。</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">SUP</td><td style="padding:5px 10px">補充筆記</td><td style="padding:5px 10px;color:var(--text-dim,#888)">補充教材、整理筆記、學習單、動畫解析等支援資源的完成情形。</td></tr>
-              <tr><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">TUT</td><td style="padding:5px 10px">輔導資源</td><td style="padding:5px 10px;color:var(--text-dim,#888)">課輔、解題、重點複習等輔導類資源的使用情形。</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;font-family:'JetBrains Mono',monospace">QUZ</td><td style="padding:5px 10px">題庫測驗</td><td style="padding:5px 10px;color:var(--text-dim,#888)">題庫、測驗、練習題等作答或完成情形。</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap;font-family:'JetBrains Mono',monospace">AUD</td><td style="padding:5px 10px;white-space:nowrap">聽覺教材</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">音檔、語音講解等聽覺教材的完成情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap;font-family:'JetBrains Mono',monospace">VID</td><td style="padding:5px 10px;white-space:nowrap">影音教材</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">教學影片、EverCam 等影音教材的完成情形。</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap;font-family:'JetBrains Mono',monospace">TXT</td><td style="padding:5px 10px;white-space:nowrap">文字教材</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">講義、參考教材、延伸閱讀等文字資源的完成情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap;font-family:'JetBrains Mono',monospace">SUP</td><td style="padding:5px 10px;white-space:nowrap">補充筆記</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">補充教材、整理筆記、學習單、動畫解析等支援資源的完成情形。</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap;font-family:'JetBrains Mono',monospace">TUT</td><td style="padding:5px 10px;white-space:nowrap">輔導資源</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">課輔、解題、重點複習等輔導類資源的使用情形。</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap;font-family:'JetBrains Mono',monospace">QUZ</td><td style="padding:5px 10px;white-space:nowrap">題庫測驗</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">題庫、測驗、練習題等作答或完成情形。</td></tr>
             </tbody>
           </table>
         </div>
