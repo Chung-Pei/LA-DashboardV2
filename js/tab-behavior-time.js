@@ -767,7 +767,7 @@ const BehaviorTimeTab = (() => {
     // 建構 SVG
 
     let svgParts = [
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" style="font-family:sans-serif;display:block;overflow:visible">`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" width="100%" style="min-width:${svgW}px;font-family:sans-serif;display:block;overflow:visible">`,
     ];
 
     // 小時標籤（X 軸）
