@@ -535,5 +535,10 @@ const BehaviorRadarTab = (() => {
     URL.revokeObjectURL(url);
   }
 
-  return{init,switchView,toggleCluster,renderClusterSummary,onYearChange,selectCluster,selectPassFilter,exportClusterCSV};
+  function resetFilters(){
+    _selectedSemester="all";_selectedCluster="P0";_passFilter="all";_semesterFilterNote=null;
+    _renderControls();_renderClusterCards("clusterSummaryCards");renderRadar("radarChart");
+    const ins=document.getElementById("radarInsightsPanel");if(ins)ins.style.display="none";
+  }
+  return{init,switchView,toggleCluster,renderClusterSummary,onYearChange,selectCluster,selectPassFilter,exportClusterCSV,resetFilters};
 })();
