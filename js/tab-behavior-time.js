@@ -188,16 +188,16 @@ const BehaviorTimeTab = (() => {
       `<option value="fail"${_filterPass === "fail" ? " selected" : ""}>不及格</option>`,
     ].join("");
     anchor.innerHTML = `
-      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)">
+      <div style="display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:center;gap:8px;margin-bottom:12px;padding:8px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030);white-space:nowrap">
         <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
-        <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">學期
-          <select id="timeSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${semOptions}</select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--text-dim,#888);flex-shrink:0">學期
+          <select id="timeSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.78rem;padding:2px 4px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer;max-width:90px">${semOptions}</select>
         </label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">分群
-          <select id="timeClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${clusterOptions}</select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--text-dim,#888);flex-shrink:0">分群
+          <select id="timeClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.78rem;padding:2px 4px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer;max-width:110px">${clusterOptions}</select>
         </label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">及格狀況
-          <select id="timePassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${passOptions}</select>
+        <label style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:var(--text-dim,#888);flex-shrink:0">及格
+          <select id="timePassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.78rem;padding:2px 4px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer;max-width:80px">${passOptions}</select>
         </label>
         <span id="timeFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>
       </div>`;
@@ -565,14 +565,14 @@ const BehaviorTimeTab = (() => {
       `<option value="pass"${_filterPass === "pass" ? " selected" : ""}>及格</option>`,
       `<option value="fail"${_filterPass === "fail" ? " selected" : ""}>不及格</option>`,
     ].join("");
-    const selectStyle2 = `font-size:.78rem;padding:2px 6px;border-radius:6px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer`;
+    const selectStyle2 = `font-size:.76rem;padding:2px 4px;border-radius:6px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer;max-width:105px`;
     const filterBadge  =
-      `<div style="display:flex;flex-wrap:wrap;align-items:center;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
-      `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6;gap:8px">` +
-      `<span style="font-weight:700">篩選條件</span>` +
-      `<label style="display:flex;align-items:center;gap:4px">📅 <select id="preExamSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${semOptions2}</select></label>` +
-      `<label style="display:flex;align-items:center;gap:4px">👥 <select id="preExamClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${clusterOptions2}</select></label>` +
-      `<label style="display:flex;align-items:center;gap:4px">✅ <select id="preExamPassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${passOptions2}</select></label>` +
+      `<div style="display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:center;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
+      `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6;gap:6px;white-space:nowrap">` +
+      `<span style="font-weight:700;flex-shrink:0">篩選條件</span>` +
+      `<label style="display:flex;align-items:center;gap:3px;flex-shrink:0">📅 <select id="preExamSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${semOptions2}</select></label>` +
+      `<label style="display:flex;align-items:center;gap:3px;flex-shrink:0">👥 <select id="preExamClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${clusterOptions2}</select></label>` +
+      `<label style="display:flex;align-items:center;gap:3px;flex-shrink:0">✅ <select id="preExamPassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${passOptions2}</select></label>` +
       `</div>`;
     el.innerHTML =
       filterBadge +
@@ -622,14 +622,14 @@ const BehaviorTimeTab = (() => {
         `<option value="pass"${_filterPass === "pass" ? " selected" : ""}>及格</option>`,
         `<option value="fail"${_filterPass === "fail" ? " selected" : ""}>不及格</option>`,
       ].join("");
-      const selectStyle = `font-size:.78rem;padding:2px 6px;border-radius:6px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer`;
+      const selectStyle = `font-size:.76rem;padding:2px 4px;border-radius:6px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer;max-width:105px`;
       badgeEl.innerHTML =
-        `<div style="display:flex;flex-wrap:wrap;align-items:center;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
-        `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6;gap:8px">` +
-        `<span style="font-weight:700">篩選條件</span>` +
-        `<label style="display:flex;align-items:center;gap:4px">📅 <select id="tsDonutSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${semOptions}</select></label>` +
-        `<label style="display:flex;align-items:center;gap:4px">👥 <select id="tsDonutClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${clusterOptions}</select></label>` +
-        `<label style="display:flex;align-items:center;gap:4px">✅ <select id="tsDonutPassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${passOptions}</select></label>` +
+        `<div style="display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:center;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
+        `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6;gap:6px;white-space:nowrap">` +
+        `<span style="font-weight:700;flex-shrink:0">篩選條件</span>` +
+        `<label style="display:flex;align-items:center;gap:3px;flex-shrink:0">📅 <select id="tsDonutSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${semOptions}</select></label>` +
+        `<label style="display:flex;align-items:center;gap:3px;flex-shrink:0">👥 <select id="tsDonutClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${clusterOptions}</select></label>` +
+        `<label style="display:flex;align-items:center;gap:3px;flex-shrink:0">✅ <select id="tsDonutPassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${passOptions}</select></label>` +
         `</div>`;
     }
     if (_charts.timeSlot) _charts.timeSlot.destroy();
