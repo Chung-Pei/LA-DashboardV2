@@ -1883,10 +1883,7 @@ body.light .subject-input {
 
       <div style="display:flex;align-items:center;margin:0 0 12px;gap:8px">
         <h5 style="margin:0;font-weight:600;flex:1">📊 學習行為分析 <span style="font-size:0.8rem;color:var(--text-dim,#888);font-weight:400">Learning Behavior</span></h5>
-        <button id="lResetBtn" onclick="
-          if(window.BehaviorRadarTab && BehaviorRadarTab.resetFilters) BehaviorRadarTab.resetFilters();
-          if(window.BehaviorTimeTab && BehaviorTimeTab.resetFilters) BehaviorTimeTab.resetFilters();
-          if(window.BehaviorCorrelationTab && BehaviorCorrelationTab.resetFilters) BehaviorCorrelationTab.resetFilters();"
+        <button id="lResetBtn" onclick="resetBehaviorFilters()"
                 style="padding:4px 12px;border-radius:6px;border:1px solid var(--border2);
                        background:var(--surface2);color:var(--text-dim);font-size:10px;cursor:pointer;
                        white-space:nowrap;flex-shrink:0;transition:all 0.15s"
@@ -6345,6 +6342,13 @@ loadData();
 <script src="js/tab-behavior-correlation.js?v=20260508a"></script>
 <script src="js/tab-behavior-time.js?v=20260508a"></script>
 <script>
+// ── 清除條件：各分頁獨立 try/catch 確保互不影響 ──────────
+function resetBehaviorFilters() {
+  try { if (window.BehaviorRadarTab       && typeof BehaviorRadarTab.resetFilters       === 'function') BehaviorRadarTab.resetFilters();       } catch(e) { console.error('[resetBehaviorFilters] radar:', e); }
+  try { if (window.BehaviorTimeTab        && typeof BehaviorTimeTab.resetFilters        === 'function') BehaviorTimeTab.resetFilters();        } catch(e) { console.error('[resetBehaviorFilters] time:', e); }
+  try { if (window.BehaviorCorrelationTab && typeof BehaviorCorrelationTab.resetFilters === 'function') BehaviorCorrelationTab.resetFilters(); } catch(e) { console.error('[resetBehaviorFilters] correlation:', e); }
+}
+
 // ── BehaviorTabManager：懶載入協調器 ────────────────────
 const BehaviorTabManager = (() => {
   const _init = { radar: false, correlation: false, time: false };
