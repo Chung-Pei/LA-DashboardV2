@@ -4837,7 +4837,7 @@ function renderFirstVsDelta() {
 // D2: Heatmap（純 SVG/HTML，不用 Chart.js）
 function renderHeatmap(filtered) {
   const wrap = document.getElementById('heatmapWrap');
-  const sems  = DATA.meta.semesters;
+  const sems  = getDSemList();  // ← 使用篩選後學期，與 renderD 一致
 
   function mergeWeightedAvg(a, aw, b, bw) {
     if (a == null) return b ?? null;
@@ -5451,10 +5451,12 @@ function renderD() {
 
   // 正課 vs 實驗課：依 dType 過濾（比較基準一致）
   // 正課 type 值為 'theory'（或 etl 產生的對應值），實驗課為 'practicum'
+  const semsSet = new Set(sems); // 從 getDSemList() 取得，支援多選 / 範圍
   const allClasses = Object.values(DATA.class_summary).map(c => ({
     ...c,
     program: classifyProgram(c.sheet_name, c.semester)
   })).filter(c => {
+    if (!semsSet.has(c.semester)) return false;  // ← 補學期篩選，使三圖與趨勢圖資料一致
     if (dType === 'practicum') return c.type === 'practicum';
     return c.type !== 'practicum'; // theory / summer / 重修班 均屬「非實驗」正課
   });
