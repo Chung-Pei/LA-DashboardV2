@@ -1190,7 +1190,7 @@ body.light .subject-input {
 .filter-bar.collapsed { display: none !important; }
 </style>
 <!-- 核心篩選邏輯模組 -->
-<script src="filter-engine.js"></script>
+<script src="js/filter-engine.js"></script>
 </head>
 <body>
 
@@ -6344,9 +6344,9 @@ loadData();
 <script>
 // ── 清除條件：各分頁獨立 try/catch 確保互不影響 ──────────
 function resetBehaviorFilters() {
-  try { if (window.BehaviorRadarTab       && typeof BehaviorRadarTab.resetFilters       === 'function') BehaviorRadarTab.resetFilters();       } catch(e) { console.error('[resetBehaviorFilters] radar:', e); }
-  try { if (window.BehaviorTimeTab        && typeof BehaviorTimeTab.resetFilters        === 'function') BehaviorTimeTab.resetFilters();        } catch(e) { console.error('[resetBehaviorFilters] time:', e); }
-  try { if (window.BehaviorCorrelationTab && typeof BehaviorCorrelationTab.resetFilters === 'function') BehaviorCorrelationTab.resetFilters(); } catch(e) { console.error('[resetBehaviorFilters] correlation:', e); }
+  try { if (typeof BehaviorRadarTab       !== 'undefined' && typeof BehaviorRadarTab.resetFilters       === 'function') BehaviorRadarTab.resetFilters();       } catch(e) { console.error('[resetBehaviorFilters] radar:', e); }
+  try { if (typeof BehaviorTimeTab        !== 'undefined' && typeof BehaviorTimeTab.resetFilters        === 'function') BehaviorTimeTab.resetFilters();        } catch(e) { console.error('[resetBehaviorFilters] time:', e); }
+  try { if (typeof BehaviorCorrelationTab !== 'undefined' && typeof BehaviorCorrelationTab.resetFilters === 'function') BehaviorCorrelationTab.resetFilters(); } catch(e) { console.error('[resetBehaviorFilters] correlation:', e); }
 }
 
 // ── BehaviorTabManager：懶載入協調器 ────────────────────
