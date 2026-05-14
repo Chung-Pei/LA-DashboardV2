@@ -217,7 +217,11 @@ const BehaviorTimeTab = (() => {
   function _studentRows(applyFilters = true) {
     const timeStudents = _timeData?.students || [];
     const rows = timeStudents.map(s => {
-      const tp = s.time_profile || {};
+      // [Fix v2.1] time_distribution.json 的 student 物件為扁平結構（07_export_json.py），
+      // 所有 time_profile 欄位直接輸出於 s 頂層，不存在 s.time_profile 包層。
+      // 原本 `const tp = s.time_profile || {}` 導致 tp 永遠為 {}，
+      // 所有時段分布、考試距離、週節律欄位皆讀取失敗（靜默回傳 0/{} ）。
+      const tp = s;
       return {
         anon_id:             s.anon_id,
         masked_id:           s.masked_id,
@@ -235,7 +239,7 @@ const BehaviorTimeTab = (() => {
         finalPeriod:         _num(tp.final_period_minutes),
         activeWeeks:         _num(tp.active_weeks),
         timeSlotDistribution: tp.time_slot_distribution || {},
-        // v2.1 新欄位
+        // v2.1 新欄位（已正確從 s 頂層讀取，維持不變）
         heatmapRaw:          s.heatmap_matrix?.raw        || {},
         heatmapNorm:         s.heatmap_matrix?.normalized || {},
         hourlyRaw:           s.hourly_distribution?.raw        || [],
