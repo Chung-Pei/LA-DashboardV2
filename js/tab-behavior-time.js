@@ -758,16 +758,17 @@ const BehaviorTimeTab = (() => {
     const maxVal = vals.length ? Math.max(...vals) : 1;
 
     // SVG 尺寸參數
-    const cellW = 28, cellH = 22;
+    const cellW = 22, cellH = 18;
     const labelW = 22, labelH = 20;
+    const lgH = 20; // 圖例區高度（內嵌於 SVG）
     const svgW = labelW + 24 * cellW;
-    const svgH = labelH + 7  * cellH;
+    const svgH = labelH + 7 * cellH + lgH;
 
 
     // 建構 SVG
 
     let svgParts = [
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" width="100%" style="min-width:${svgW}px;font-family:sans-serif;display:block;overflow:visible">`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgW} ${svgH}" width="100%" style="min-width:${svgW}px;font-family:sans-serif;display:block">`,
     ];
 
     // 小時標籤（X 軸）
@@ -802,8 +803,8 @@ const BehaviorTimeTab = (() => {
       }
     });
 
-    // 圖例（右下角）
-    const lgX = svgW - 100, lgY = svgH + 6;
+    // 圖例（右下角，內嵌於 SVG）
+    const lgX = svgW - 100, lgY = svgH - lgH + 4;
     svgParts.push(`<text x="${lgX}" y="${lgY + 10}" font-size="9" fill="#6b748f">少</text>`);
     for (let i = 0; i < 8; i++) {
       const t = i / 7;
@@ -817,7 +818,7 @@ const BehaviorTimeTab = (() => {
     svgParts.push("</svg>");
 
     wrap.innerHTML = `
-      <div class="heatmap-scroll" style="overflow-x:auto;padding-bottom:18px">
+      <div class="heatmap-scroll" style="overflow-x:auto">
         ${svgParts.join("")}
       </div>`;
 
