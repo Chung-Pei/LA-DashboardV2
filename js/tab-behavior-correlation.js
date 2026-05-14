@@ -1,6 +1,6 @@
 /**
  * tab-behavior-correlation.js
- * Phase 2B：相關性分析 Tab — Pearson 熱力圖 + 散佈圖
+ * 相關性分析 Tab — Pearson 熱力圖 + 散佈圖
  * 依賴：Chart.js (scatter)、behavior-loader.js
  */
 
@@ -27,7 +27,6 @@ const BehaviorCorrelationTab = (() => {
     early_start_ratio:            "提早學習比例",
     cram_pattern_score:           "臨陣磨槍指數",
     pre_exam_intensity:           "考前學習強度",
-    // Ph2b 新增：題庫品質指標
     quz_first_attempt_accuracy:   "首答正確率",
     quz_final_accuracy:           "最終正確率",
     quz_score_delta:              "成績進步幅度",
@@ -54,12 +53,12 @@ const BehaviorCorrelationTab = (() => {
   let _behaviorByMasked = null;   // masked_id → behavior student
   let _behaviorByAnon   = null;   // anon_id → behavior student
   let _allSemesters     = [];     // 可用學期列表
-  let _allEduTypes      = [];     // Ph2b：可用學制列表（動態從資料取）
+  let _allEduTypes      = [];
   let _filterSemester   = "all";
   let _filterCluster    = "all";
   let _filterPass       = "all";
-  let _filterEduType    = "all";  // Ph2b：學制篩選
-  let _filterOutlier    = false;  // Ph2b：異常值排除開關
+  let _filterEduType    = "all";
+  let _filterOutlier    = false;
   let _corrType         = "pearson";
 
   /**
@@ -237,7 +236,7 @@ const BehaviorCorrelationTab = (() => {
               ...row,
               cluster:  row.cluster  || behaviorRow?.cluster  || "",
               semester: row.semester || behaviorRow?.semester  || "",
-              edu_type: row.edu_type || "",   // Ph2b：學制
+              edu_type: row.edu_type || "",
             };
           })
         : raw;
@@ -247,7 +246,6 @@ const BehaviorCorrelationTab = (() => {
         ? _corrData.meta.semesters
         : (behaviorData?.meta?.semesters || []);
 
-      // Ph2b：動態收集可用學制（從 scatter_data.edu_type）
       _allEduTypes = Array.isArray(_allScatterData)
         ? [...new Set(_allScatterData.map(r => r.edu_type).filter(Boolean))]
         : [];
@@ -259,7 +257,7 @@ const BehaviorCorrelationTab = (() => {
       _filterOutlier  = false;
 
       _renderFilterBar(heatmapId);
-      _renderInsightsBadge(heatmapId);   // Ph2b：最高相關指標 badge
+      _renderInsightsBadge(heatmapId);
       _applyFiltersAndRender(heatmapId, scatterWrapperId);
     } catch (err) {
       BehaviorLoader.showError("tab-correlation", err.message);
@@ -290,7 +288,7 @@ const BehaviorCorrelationTab = (() => {
     if (existing) { existing.remove(); }
 
     const semOptions = [
-      `<option value="all">全部年度</option>`,
+      `<option value="all">全部學期</option>`,
       ..._allSemesters.map(s => `<option value="${s}">${_formatSemLabel(s)}</option>`),
     ].join("");
 
@@ -313,23 +311,7 @@ const BehaviorCorrelationTab = (() => {
       `<option value="fail">不及格</option>`,
     ].join("");
 
-    // F4 修正：edu_type 實際值為英文（theory/practicum），動態建立顯示名稱
-    // 不寫死中文順序，改為：有對應則顯示中文，無對應則直接顯示原始值
-    const EDU_TYPE_DISPLAY = {
-      "theory":    "正課",
-      "practicum": "實驗課",
-    };
-    // 排序：theory 優先，practicum 次之，其餘字母序
-    const EDU_TYPE_ORDER = ["theory", "practicum"];
-    const sortedEduTypes = [..._allEduTypes].sort(
-      (a, b) => (EDU_TYPE_ORDER.indexOf(a) + 1 || 99) - (EDU_TYPE_ORDER.indexOf(b) + 1 || 99)
-    );
-    const eduTypeOptions = [
-      `<option value="all">全部修課類型</option>`,
-      ...sortedEduTypes.map(t =>
-        `<option value="${t}">${EDU_TYPE_DISPLAY[t] || t}</option>`
-      ),
-    ].join("");
+    // 修課類型（_allEduTypes / _filterEduType）保留內部邏輯，UI 已移除（規格書 §四）
 
     const hasOutlierData = Object.keys(_corrData?.outlier_thresholds || {}).length > 0;
 
@@ -339,19 +321,11 @@ const BehaviorCorrelationTab = (() => {
     bar.innerHTML = `
       <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
       <div style="display:flex;align-items:center;gap:5px">
-        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">年度</label>
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">學期</label>
         <select id="corrSemFilter"
                 style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
                 onchange="BehaviorCorrelationTab.onFilterChange()">
           ${semOptions}
-        </select>
-      </div>
-      <div style="display:flex;align-items:center;gap:5px">
-        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">修課類型</label>
-        <select id="corrEduTypeFilter"
-                style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
-                onchange="BehaviorCorrelationTab.onFilterChange()">
-          ${eduTypeOptions}
         </select>
       </div>
       <div style="display:flex;align-items:center;gap:5px">
@@ -363,7 +337,7 @@ const BehaviorCorrelationTab = (() => {
         </select>
       </div>
       <div style="display:flex;align-items:center;gap:5px">
-        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">及格/不及格</label>
+        <label style="font-size:.78rem;color:var(--text-dim,#888);white-space:nowrap">及格狀況</label>
         <select id="corrPassFilter"
                 style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer"
                 onchange="BehaviorCorrelationTab.onFilterChange()">
@@ -405,15 +379,20 @@ const BehaviorCorrelationTab = (() => {
     _lastFilterKey = null;   // 切換相關係數方法時強制重新過濾，確保 scatter 與熱力圖同步
     _updateCorrTypeButtons();
     _renderHeatmap("corrHeatmap");
+
+    // 確保 tooltip 中的 r/ρ 標籤與目前選擇方法一致。
+    if (_currentTarget) {
+      showScatter(_currentTarget.feat, _currentTarget.gradeCol);
+    }
   }
 
   function onFilterChange() {
     _filterSemester = document.getElementById("corrSemFilter")?.value     || "all";
     _filterCluster  = document.getElementById("corrClusterFilter")?.value  || "all";
     _filterPass     = document.getElementById("corrPassFilter")?.value     || "all";
-    _filterEduType  = document.getElementById("corrEduTypeFilter")?.value  || "all";
+    _filterEduType  = "all";  // 修課類型 UI 已移除（規格書 §四），內部邏輯保留備用
     _filterOutlier  = document.getElementById("corrOutlierToggle")?.checked ?? false;
-    _lastFilterKey  = null;   // 強制重新過濾
+    _lastFilterKey  = null;
     _applyFiltersAndRender("corrHeatmap", "scatterSection");
   }
 
@@ -605,10 +584,8 @@ const BehaviorCorrelationTab = (() => {
         if (r == null) return `<td class="text-center text-muted small">—</td>`;
         const bg        = _rToColor(r);
         const textColor = Math.abs(r) > 0.55 ? "#fff" : "var(--text,#dde3f5)";
-        // Ph2b：p-value 顯著性星號（僅 Pearson 模式）
         const p = _corrType === "pearson" ? _pearsonP(feat, g) : null;
         const sig = p !== null ? (p < 0.01 ? "**" : p < 0.05 ? "*" : "") : "";
-        // F3 修正：p 極小值（截斷前為 0）顯示為 p<0.000001，而非 p=0.0000
         const pTip = p !== null
           ? (p < 1e-6 ? " p<0.000001" : ` p=${p.toFixed(4)}`)
           : "";
@@ -804,7 +781,6 @@ const BehaviorCorrelationTab = (() => {
       ? (rho  != null ? `📊 Spearman ρ = ${rho  >= 0 ? "+" : ""}${rho.toFixed(3)}` : null)
       : (r    != null ? `📈 Pearson  r = ${r    >= 0 ? "+" : ""}${r.toFixed(3)}`  : null);
 
-    // C1：計算 OLS 迴歸線（n≥30 才畫，否則靜默略過）
     const reg = _calcRegression(points);
     const datasets = [{
       label: `${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[gradeCol] || gradeCol}${rLabel}`,

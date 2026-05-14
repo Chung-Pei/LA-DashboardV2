@@ -306,9 +306,10 @@ const FilterEngine = (() => {
         const sn = _normalizeSheetName(rec.sheet_name || '');
         if (!sn) return;
 
-        const recProgram = isRetakeStudent(rec, getProgram(sn))
+        const baseProgram = getProgram(sn);
+        const recProgram = isRetakeStudent(rec, baseProgram)
           ? 'retake_student'
-          : (getProgram(sn) || 'unknown');
+          : (baseProgram || 'unknown');
 
         // 重修生過濾（規則五）
         if (!includeRetaker && recProgram === 'retake_student') return;

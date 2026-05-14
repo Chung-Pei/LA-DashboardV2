@@ -102,7 +102,6 @@ const BehaviorRadarTab = (() => {
     return (students || []).filter(s => s.masked_id && s.features);
   }
 
-  /* FIX 1 */
   function _renderBehaviorMetaStrip(){
     const meta=_mergedMeta(),total=_clusterTotal();
     const semText=_selectedSemester&&_selectedSemester!=="all"?_formatSemester(_selectedSemester):_semesterText(meta);
@@ -130,14 +129,18 @@ const BehaviorRadarTab = (() => {
     finally{BehaviorLoader.setLoading("tab-behavior",false);}
   }
 
-  /* FIX 2: two-tier controls */
   function _renderControls(containerId){
     const el=document.getElementById(containerId);if(!el)return;
     const semOpts=[
       `<option value="all">全部年度（${_behaviorMeta.semester_range_label||_behaviorMeta.semester_range||"—"}）</option>`,
       ..._allSemesters.map(s=>`<option value="${s}"${s===_selectedSemester?" selected":""}>${_formatSemester(s)}</option>`),
     ].join("");
-    const noteHtml=_semesterFilterNote?`<div style="font-size:.76rem;color:var(--accent3,#e67e22);margin-top:3px;margin-bottom:6px">${_semesterFilterNote}</div>`:"";const yearSel=_allSemesters.length?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px"><span style="font-size:.8rem;color:var(--text-dim,#888);white-space:nowrap">選擇年度：</span><select id="behaviorYearSelect" style="font-size:.82rem;padding:4px 8px;border-radius:8px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer" onchange="BehaviorRadarTab.onYearChange(this.value)">${semOpts}</select></div>${noteHtml}`:"";
+    const noteHtml=_semesterFilterNote?`<div style="font-size:.76rem;color:var(--accent3,#e67e22);margin-top:3px;margin-bottom:6px">${_semesterFilterNote}</div>`:"";
+    // 學期膠囊（規格書 §四-A）
+    const semCapsules=_allSemesters.length?[
+      `<button class="brt-sem${_selectedSemester==="all"?" brt-semA":""}" onclick="BehaviorRadarTab.onYearChange('all')">全部</button>`,
+      ..._allSemesters.map(s=>`<button class="brt-sem${s===_selectedSemester?" brt-semA":""}" onclick="BehaviorRadarTab.onYearChange('${s}')">${_formatSemester(s)}</button>`)
+    ].join(""):"";
     const clBtns=Object.entries(CLUSTER_NAMES).map(([k,n])=>`<button class="brt-cl${k===_selectedCluster?" brt-clA":""}" style="--cc:${CLUSTER_COLORS[k].border};--cb:${CLUSTER_COLORS[k].bg}" onclick="BehaviorRadarTab.selectCluster('${k}')"><span class="brt-code">${k}</span> ${n}</button>`).join("");
     const pfBtns=[{key:"all",lbl:"全體"},{key:"pass",lbl:"✅ 及格"},{key:"fail",lbl:"❌ 不及格"}].map(({key,lbl})=>`<button class="brt-pf${key===_passFilter?" brt-pfA":""}" onclick="BehaviorRadarTab.selectPassFilter('${key}')">${lbl}</button>`).join("");
     // 防止 <style> 重複注入
@@ -153,17 +156,18 @@ const BehaviorRadarTab = (() => {
         #${containerId} .brt-code{font-weight:700;font-family:'JetBrains Mono','Courier New',monospace}
         #${containerId} .brt-pf{padding:4px 12px;border-radius:20px;border:1.5px solid var(--accent,#3498db);background:transparent;color:var(--accent,#3498db);font-size:.78rem;cursor:pointer;transition:background .15s;font-family:inherit}
         #${containerId} .brt-pfA{background:var(--accent,#3498db);color:#fff;font-weight:700}
+        #${containerId} .brt-sem{padding:3px 9px;border-radius:14px;border:1px solid var(--border2,#353c58);background:var(--surface2,#1c2030);color:var(--text-dim,#888);font-size:.76rem;font-family:'JetBrains Mono','Courier New',monospace;cursor:pointer;transition:all .15s;white-space:nowrap}
+        #${containerId} .brt-semA{background:var(--accent,#3498db);color:#fff;border-color:var(--accent,#3498db);font-weight:700}
       `;
       document.head.appendChild(s);
     }
     el.innerHTML=`<div style="display:flex;flex-direction:column;gap:2px">
-      ${yearSel}
+      ${semCapsules?`<div class="brt-row"><span class="brt-lbl">學期</span><div style="display:flex;flex-wrap:wrap;gap:4px">${semCapsules}</div></div>${noteHtml}`:""}
       <div class="brt-row"><span class="brt-lbl">依分群</span>${clBtns}</div>
-      <div class="brt-row"><span class="brt-lbl">及格/不及格</span>${pfBtns}</div>
+      <div class="brt-row"><span class="brt-lbl">及格狀況</span>${pfBtns}</div>
     </div>`;
   }
 
-  /* FIX 3 */
   function onYearChange(semester){
     _selectedSemester=semester;
     const base=_radarData?._base||_radarData;
@@ -376,7 +380,7 @@ const BehaviorRadarTab = (() => {
     _renderControls("radarControls");
     renderClusterSummary("clusterSummaryCards");
     _renderRadar("radarChart");
-    _renderInsights();   // FIX: 切換視圖時同步更新洞察面板
+    _renderInsights();
   }
   // toggleCluster is an alias kept for external API compatibility
   function toggleCluster(key){selectCluster(key);}

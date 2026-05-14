@@ -1,6 +1,6 @@
 /**
  * tab-behavior-time.js  —  v2.1
- * Phase 2C：時間分析 Tab（升級版）
+ * 時間分析 Tab
  *
  * 新增功能：
  *   - renderStudyHeatmap()        學習規律熱力圖（SVG，7×24）
@@ -23,7 +23,7 @@ const BehaviorTimeTab = (() => {
 
   // ── 常數定義 ────────────────────────────────────────────────
 
-  const PASS_THRESHOLD = 60;   // WARN-2：及格門檻統一由此常數控制
+  const PASS_THRESHOLD = 60;
 
   const SLOT_LABELS = {
     MORNING:    "上午 06-12",
@@ -131,7 +131,7 @@ const BehaviorTimeTab = (() => {
     return [...new Set([...fromMeta, ...fromRows])].sort((a, b) => String(b).localeCompare(String(a)));
   }
 
-  // ── 熱力圖色彩函式（模組層級，OPT-3）────────────────────────
+  // ── 熱力圖色彩函式（模組層級）────────────────────────
   // 深藍(少) → 藍 → 橙(多)
   function _heatColor(val, maxVal) {
     if (!val || val <= 0) return "rgba(40,46,68,0.6)";
@@ -152,7 +152,6 @@ const BehaviorTimeTab = (() => {
         BehaviorLoader.load.time(),
       ]);
       _allSemesters = _availableSemesters();
-      // 全量 rows 在 init 時建立一次，篩選時只做 filter，不再重建 join
       _rowCache = { all: _studentRows(false), filtered: null };
       _rowCache.filtered = _filterRows(_rowCache.all);
       _renderFilterBar();
@@ -165,7 +164,7 @@ const BehaviorTimeTab = (() => {
   }
 
   function _renderFilterBar() {
-    // BUG-5 修正：不再整體覆蓋 #tab-time innerHTML（會破壞圖表容器）
+
     // 改為在專屬容器 #timeFilterBarAnchor 中插入，若不存在則在 #tab-time 最前面插入
     let anchor = document.getElementById("timeFilterBarAnchor");
     if (!anchor) {
@@ -191,13 +190,13 @@ const BehaviorTimeTab = (() => {
     anchor.innerHTML = `
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)">
         <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
-        <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">年度
+        <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">學期
           <select id="timeSemFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${semOptions}</select>
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">分群
           <select id="timeClusterFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${clusterOptions}</select>
         </label>
-        <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">及格/不及格
+        <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">及格狀況
           <select id="timePassFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${passOptions}</select>
         </label>
         <span id="timeFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>
@@ -279,11 +278,12 @@ const BehaviorTimeTab = (() => {
   }
 
   function _renderAll() {
-    // 只重建 filtered，all 已在 init 時建立，不重複 join
+
+    // 改為無論如何都以 _getRowCache() 取得（若不存在才完整重建）。
     if (_rowCache) {
       _rowCache.filtered = _filterRows(_rowCache.all);
     } else {
-      _rowCache = null;   // fallback：強制完整重建
+      _getRowCache();   // fallback：透過 _getRowCache() 完整重建並快取
     }
     const rows    = _filteredStudentRows();
     const countEl = document.getElementById("timeFilterCount");
@@ -294,7 +294,7 @@ const BehaviorTimeTab = (() => {
     renderPreExamIntensity("preExamChart");
     renderTimeSlotDonut("timeSlotChart");
 
-    // ── 新增圖表（OPT-2：rAF 避免篩選切換時卡頓）──
+    // ── 新增圖表（rAF 避免篩選切換時卡頓）──
     renderAIInsightBadge("aiInsightBadge");
     requestAnimationFrame(() => {
       renderStudyHeatmap("studyHeatmapWrap");
@@ -623,7 +623,7 @@ const BehaviorTimeTab = (() => {
     if (!rows.length) { el.innerHTML = ""; return; }
 
     const avgLateNight = _avg(rows.map(r => r.late_night_ratio));
-    // WARN-7 修正：過濾 null/undefined，保留真實 0 分；不用 > 0 排除有效 0 分學生
+
     const scoredRows  = rows.filter(r => r.final_score != null || r.semester_score != null);
     const scoreValues = scoredRows.map(r => _num(r.final_score ?? r.semester_score));
     const avgScore    = scoreValues.length
@@ -707,10 +707,9 @@ const BehaviorTimeTab = (() => {
     const svgW = labelW + 24 * cellW;
     const svgH = labelH + 7  * cellH;
 
-    // 色彩函式已提升至模組層級（OPT-3），此處直接呼叫
 
     // 建構 SVG
-    // BUG-2 修正：tooltip 文字改用 data-tip attribute，避免 \n 截斷 SVG attribute
+
     let svgParts = [
       `<svg xmlns="http://www.w3.org/2000/svg" width="${svgW}" height="${svgH}" style="font-family:sans-serif;display:block;overflow:visible">`,
     ];
@@ -766,8 +765,7 @@ const BehaviorTimeTab = (() => {
         ${svgParts.join("")}
       </div>`;
 
-    // BUG-5 修正：事件綁在永久容器 wrap 上，且只綁一次（data-heatmap-bound 旗標防重複）
-    // wrap.innerHTML 重建了內部 DOM，但 wrap 本身不重建，listener 不需重綁
+
     if (!wrap.dataset.heatmapBound) {
       wrap.dataset.heatmapBound = "1";
       wrap.addEventListener("mouseover", e => {
@@ -791,6 +789,9 @@ const BehaviorTimeTab = (() => {
    * 可疊加：前25%高分群、及格群、不及格群
    * 篩選器有效時：從 students[] 即時加總；無篩選時使用 ETL 預聚合
    */
+
+  const _noExamLinesPlugin = { id: "examVerticalLines", afterDraw() {} };
+
   function renderHourlyLine(canvasId) {
     const canvas = document.getElementById(canvasId);
     if (!canvas || !_timeData) return;
@@ -852,11 +853,9 @@ const BehaviorTimeTab = (() => {
     }
 
     if (_charts.hourlyLine) _charts.hourlyLine.destroy();
-    // 明確覆蓋 examVerticalLines plugin（避免全域 register 汙染此圖）
-    const _noExamLines = { id: "examVerticalLines", afterDraw() {} };
     _charts.hourlyLine = new Chart(canvas.getContext("2d"), {
       type: "line",
-      plugins: [_noExamLines],
+      plugins: [_noExamLinesPlugin],
       data: { labels: HOUR_LABELS, datasets },
       options: {
         responsive: true, maintainAspectRatio: false,
