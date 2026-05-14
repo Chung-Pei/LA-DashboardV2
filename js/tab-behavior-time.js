@@ -191,22 +191,44 @@ const BehaviorTimeTab = (() => {
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:12px;padding:10px 12px;border:1px solid rgba(110,130,165,.22);border-radius:10px;background:var(--card-bg2,#1c2030)">
         <span style="font-size:.8rem;font-weight:700;color:var(--text-mid,#4f5f78);white-space:nowrap">篩選條件</span>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">學期
-          <select id="timeSemFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${semOptions}</select>
+          <select id="timeSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${semOptions}</select>
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">分群
-          <select id="timeClusterFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${clusterOptions}</select>
+          <select id="timeClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${clusterOptions}</select>
         </label>
         <label style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--text-dim,#888)">及格狀況
-          <select id="timePassFilter" onchange="BehaviorTimeTab.onFilterChange()" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${passOptions}</select>
+          <select id="timePassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="font-size:.8rem;padding:3px 7px;border-radius:7px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer">${passOptions}</select>
         </label>
         <span id="timeFilterCount" style="font-size:.76rem;color:var(--text-dim,#888)"></span>
       </div>`;
   }
 
-  function onFilterChange() {
-    _filterSemester = document.getElementById("timeSemFilter")?.value || "all";
-    _filterCluster  = document.getElementById("timeClusterFilter")?.value || "all";
-    _filterPass     = document.getElementById("timePassFilter")?.value || "all";
+  function onFilterChange(sourceId) {
+    // [Fix Q2] 以觸發來源的 id 判斷變更的是哪個維度，取其值更新全域狀態，
+    // 再同步所有其他同維度的 select，確保頂部列與圖表內三組篩選器永遠一致。
+    if (sourceId) {
+      const el = document.getElementById(sourceId);
+      if (el) {
+        const sid = sourceId.toLowerCase();
+        if      (sid.includes("sem"))     _filterSemester = el.value;
+        else if (sid.includes("cluster")) _filterCluster  = el.value;
+        else if (sid.includes("pass"))    _filterPass     = el.value;
+      }
+    } else {
+      // 無 sourceId（直接呼叫）：從頂部列讀取
+      _filterSemester = document.getElementById("timeSemFilter")?.value     || "all";
+      _filterCluster  = document.getElementById("timeClusterFilter")?.value || "all";
+      _filterPass     = document.getElementById("timePassFilter")?.value    || "all";
+    }
+
+    // 同步所有同維度 select（頂部列 + 兩組圖表內）
+    const semIds     = ["timeSemFilter",     "preExamSemFilter",     "tsDonutSemFilter"];
+    const clusterIds = ["timeClusterFilter", "preExamClusterFilter", "tsDonutClusterFilter"];
+    const passIds    = ["timePassFilter",    "preExamPassFilter",    "tsDonutPassFilter"];
+    semIds    .forEach(id => { const el = document.getElementById(id); if (el) el.value = _filterSemester; });
+    clusterIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = _filterCluster;  });
+    passIds   .forEach(id => { const el = document.getElementById(id); if (el) el.value = _filterPass;     });
+
     _renderAll();
   }
 
@@ -283,7 +305,8 @@ const BehaviorTimeTab = (() => {
 
   function _renderAll() {
 
-    // 改為無論如何都以 _getRowCache() 取得（若不存在才完整重建）。
+    // [Fix Q1] 每次篩選變更時強制從 all rows 重新計算 filtered，
+    // 確保 AI 洞察等所有元件都使用最新篩選結果。
     if (_rowCache) {
       _rowCache.filtered = _filterRows(_rowCache.all);
     } else {
@@ -299,8 +322,10 @@ const BehaviorTimeTab = (() => {
     renderTimeSlotDonut("timeSlotChart");
 
     // ── 新增圖表（rAF 避免篩選切換時卡頓）──
-    renderAIInsightBadge("aiInsightBadge");
+    // [Fix Q1] renderAIInsightBadge 移入 rAF，確保與其他圖表同一幀執行，
+    // 避免在 _rowCache.filtered 尚未寫入前就讀取（理論上同步但保守處理）
     requestAnimationFrame(() => {
+      renderAIInsightBadge("aiInsightBadge");
       renderStudyHeatmap("studyHeatmapWrap");
       renderHourlyLine("hourlyLineChart");
     });
@@ -526,13 +551,28 @@ const BehaviorTimeTab = (() => {
     const semLabel     = _filterSemester === "all" ? "全部年度" : _formatSemLabel(_filterSemester);
     const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
     const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
+    // [Fix Q2] 改為可互動的 <select>，與全域篩選雙向同步
+    const semOptions2     = [
+      `<option value="all"${_filterSemester === "all" ? " selected" : ""}>全部年度</option>`,
+      ..._allSemesters.map(s => `<option value="${s}"${_normalizeSem(s) === _normalizeSem(_filterSemester) ? " selected" : ""}>${_formatSemLabel(s)}</option>`),
+    ].join("");
+    const clusterOptions2 = [
+      `<option value="all"${_filterCluster === "all" ? " selected" : ""}>全部分群</option>`,
+      ...Object.entries(CLUSTER_NAMES).map(([k, v]) => `<option value="${k}"${k === _filterCluster ? " selected" : ""}>${k} ${v}</option>`),
+    ].join("");
+    const passOptions2    = [
+      `<option value="all"${_filterPass === "all" ? " selected" : ""}>全部</option>`,
+      `<option value="pass"${_filterPass === "pass" ? " selected" : ""}>及格</option>`,
+      `<option value="fail"${_filterPass === "fail" ? " selected" : ""}>不及格</option>`,
+    ].join("");
+    const selectStyle2 = `font-size:.78rem;padding:2px 6px;border-radius:6px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer`;
     const filterBadge  =
-      `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
-      `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
-      `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
-      `<span style="margin-right:8px">📅 ${semLabel}</span>` +
-      `<span style="margin-right:8px">👥 ${clusterLabel}</span>` +
-      `<span>✅ ${passLabel}</span>` +
+      `<div style="display:flex;flex-wrap:wrap;align-items:center;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
+      `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6;gap:8px">` +
+      `<span style="font-weight:700">篩選條件</span>` +
+      `<label style="display:flex;align-items:center;gap:4px">📅 <select id="preExamSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${semOptions2}</select></label>` +
+      `<label style="display:flex;align-items:center;gap:4px">👥 <select id="preExamClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${clusterOptions2}</select></label>` +
+      `<label style="display:flex;align-items:center;gap:4px">✅ <select id="preExamPassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle2}">${passOptions2}</select></label>` +
       `</div>`;
     el.innerHTML =
       filterBadge +
@@ -568,16 +608,28 @@ const BehaviorTimeTab = (() => {
         badgeEl.className = "time-slot-filter-badge";
         canvas.parentElement.insertBefore(badgeEl, canvas);
       }
-      const semLabel     = _filterSemester === "all" ? "全部年度" : _formatSemLabel(_filterSemester);
-      const clusterLabel = _filterCluster  === "all" ? "全部分群" : `${_filterCluster} ${CLUSTER_NAMES[_filterCluster] || _filterCluster}`;
-      const passLabel    = _filterPass     === "all" ? "全部"     : (_filterPass === "pass" ? "及格" : "不及格");
+      // [Fix Q2] 改為可互動的 <select>，與全域篩選雙向同步
+      const semOptions     = [
+        `<option value="all"${_filterSemester === "all" ? " selected" : ""}>全部年度</option>`,
+        ..._allSemesters.map(s => `<option value="${s}"${_normalizeSem(s) === _normalizeSem(_filterSemester) ? " selected" : ""}>${_formatSemLabel(s)}</option>`),
+      ].join("");
+      const clusterOptions = [
+        `<option value="all"${_filterCluster === "all" ? " selected" : ""}>全部分群</option>`,
+        ...Object.entries(CLUSTER_NAMES).map(([k, v]) => `<option value="${k}"${k === _filterCluster ? " selected" : ""}>${k} ${v}</option>`),
+      ].join("");
+      const passOptions    = [
+        `<option value="all"${_filterPass === "all" ? " selected" : ""}>全部</option>`,
+        `<option value="pass"${_filterPass === "pass" ? " selected" : ""}>及格</option>`,
+        `<option value="fail"${_filterPass === "fail" ? " selected" : ""}>不及格</option>`,
+      ].join("");
+      const selectStyle = `font-size:.78rem;padding:2px 6px;border-radius:6px;border:1px solid var(--border,#2a2f45);background:var(--surface2,#1c2030);color:var(--text-mid,#9aa0b8);cursor:pointer`;
       badgeEl.innerHTML =
-        `<div style="display:flex;flex-wrap:wrap;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
-        `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6">` +
-        `<span style="font-weight:700;margin-right:6px">篩選條件</span>` +
-        `<span style="margin-right:8px">📅 ${semLabel}</span>` +
-        `<span style="margin-right:8px">👥 ${clusterLabel}</span>` +
-        `<span>✅ ${passLabel}</span>` +
+        `<div style="display:flex;flex-wrap:wrap;align-items:center;box-sizing:border-box;max-width:100%;margin-bottom:8px;padding:5px 10px;border-radius:6px;background:var(--card-bg2,#1c2030);` +
+        `border:1px solid rgba(110,130,165,.2);font-size:.75rem;color:var(--text-mid,#4f5f78);line-height:1.6;gap:8px">` +
+        `<span style="font-weight:700">篩選條件</span>` +
+        `<label style="display:flex;align-items:center;gap:4px">📅 <select id="tsDonutSemFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${semOptions}</select></label>` +
+        `<label style="display:flex;align-items:center;gap:4px">👥 <select id="tsDonutClusterFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${clusterOptions}</select></label>` +
+        `<label style="display:flex;align-items:center;gap:4px">✅ <select id="tsDonutPassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${passOptions}</select></label>` +
         `</div>`;
     }
     if (_charts.timeSlot) _charts.timeSlot.destroy();
