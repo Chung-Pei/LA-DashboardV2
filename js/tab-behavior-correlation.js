@@ -10,6 +10,11 @@
  *           改為接受 rows 參數，fallback 順序：rows → _lastFiltered → _allScatterData。
  *   BUG3 — setCorrType 只呼叫 _renderHeatmap，未同步更新散佈圖；
  *           改呼叫 _applyFiltersAndRender 確保全部元件連動。
+ *   BUG4 — _renderHeatmap 永遠讀 _corrData.pearson（ETL 全量預算值），
+ *           篩選後熱力圖 r 值不更新；改為接受 filteredRows 參數，
+ *           有篩選時以 _pearsonValue/_spearmanValue 即時重算，
+ *           全量（all）時仍優先用 ETL 值避免不必要運算。
+ *           篩選後 p-value 無法可靠估算，改顯示 n=筆數。
  */
 
 const BehaviorCorrelationTab = (() => {
@@ -461,9 +466,8 @@ const BehaviorCorrelationTab = (() => {
     const countEl = document.getElementById("corrFilterCount");
     if (countEl) countEl.textContent = `共 ${count} 筆`;
 
-    // 熱力圖沿用 ETL 預算值（pearson / spearman），不受篩選影響
-    _renderHeatmap(heatmapId);
-    // 散佈圖傳入篩選後資料，不修改 _corrData
+    // 熱力圖與散佈圖同步使用篩選後資料
+    _renderHeatmap(heatmapId, filtered);
     _renderScatterSelector(scatterWrapperId, filtered);
     _renderLaggedSection(scatterWrapperId);
   }
@@ -564,23 +568,55 @@ const BehaviorCorrelationTab = (() => {
   }
 
   // ── Pearson 熱力圖（HTML table + 色彩映射）────────────────
-
-  function _renderHeatmap(containerId) {
+  //
+  // FIX BUG4：接受 filteredRows 參數
+  //   • filteredRows 為 null / undefined → 全量模式，優先讀 ETL 預算值（_corrData.pearson/spearman）
+  //   • filteredRows 為陣列（含全量）→ 即時重算 r，確保與篩選條件一致
+  //   • 篩選後無法可靠估算 p-value，改在 tooltip 顯示 n=筆數
+  function _renderHeatmap(containerId, filteredRows) {
     const el = document.getElementById(containerId);
     if (!el || !_corrData) return;
 
-    const features = _features();
-    const grades   = _targets();
+    const features   = _features();
+    const grades     = _targets();
     const isSpearman = _corrType === "spearman";
-    const matrix = isSpearman
-      ? (_corrData.spearman || _corrData.pearson || {})
-      : (_corrData.pearson || {});
-    const corrSym = isSpearman ? "ρ" : "r";
+    const corrSym    = isSpearman ? "ρ" : "r";
+
+    // 判斷是否為「全量」模式：篩選狀態全為 all 且無排除異常值
+    const isUnfiltered = (
+      _filterSemester === "all" &&
+      _filterCluster  === "all" &&
+      _filterPass     === "all" &&
+      _filterEduType  === "all" &&
+      !_filterOutlier
+    );
 
     if (!features.length || !grades.length) {
       el.innerHTML = `<p class="text-muted small">相關性資料格式缺少 features / targets。</p>`;
       return;
     }
+
+    /**
+     * 取得 r 值：
+     *   全量模式 → 優先讀 ETL 預算值（精確且含 p-value）
+     *   篩選模式 → 即時重算（_pearsonValue / _spearmanValue）
+     */
+    function _getR(feat, g) {
+      if (isUnfiltered) {
+        // 全量：讀 ETL 預算值
+        return _pearson(feat, g);
+      }
+      // 篩選子集：即時重算
+      const rows = Array.isArray(filteredRows) ? filteredRows : (_lastFiltered ?? _allScatterData ?? []);
+      return isSpearman
+        ? _spearmanValue(rows, feat, g)
+        : _pearsonValue(rows, feat, g);
+    }
+
+    // 篩選後資料列數（用於 tooltip n=N 顯示）
+    const nCount = Array.isArray(filteredRows) ? filteredRows.length
+                 : Array.isArray(_allScatterData) ? _allScatterData.length
+                 : null;
 
     const gradeHeaderCells = grades.map(g =>
       `<th class="text-center small fw-normal" style="min-width:90px">
@@ -590,18 +626,27 @@ const BehaviorCorrelationTab = (() => {
 
     const rows = features.map(feat => {
       const cells = grades.map(g => {
-        const r = _pearson(feat, g);
+        const r = _getR(feat, g);
         if (r == null) return `<td class="text-center text-muted small">—</td>`;
         const bg        = _rToColor(r);
         const textColor = Math.abs(r) > 0.55 ? "#fff" : "var(--text,#dde3f5)";
-        const p = _corrType === "pearson" ? _pearsonP(feat, g) : null;
-        const sig = p !== null ? (p < 0.01 ? "**" : p < 0.05 ? "*" : "") : "";
-        const pTip = p !== null
-          ? (p < 1e-6 ? " p<0.000001" : ` p=${p.toFixed(4)}`)
-          : "";
+
+        // 全量時顯示 ETL p-value 顯著性標記；篩選後改顯示 n=N（p 值不可靠）
+        let sig = "";
+        let tipExtra = "";
+        if (isUnfiltered && _corrType === "pearson") {
+          const p = _pearsonP(feat, g);
+          if (p !== null) {
+            sig = p < 0.01 ? "**" : p < 0.05 ? "*" : "";
+            tipExtra = p < 1e-6 ? " p<0.000001" : ` p=${p.toFixed(4)}`;
+          }
+        } else if (!isUnfiltered && nCount !== null) {
+          tipExtra = ` n=${nCount}`;
+        }
+
         return `<td class="text-center small" style="background:${bg};color:${textColor};cursor:pointer"
                     onclick="BehaviorCorrelationTab.showScatter('${feat}','${g}')"
-                    title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: ${corrSym}=${r}${pTip}">
+                    title="${FEAT_LABELS[feat] || feat} vs ${GRADE_LABELS[g] || g}: ${corrSym}=${r >= 0 ? "+" : ""}${r.toFixed(3)}${tipExtra}">
                   ${corrSym}${r >= 0 ? "+" : ""}${r.toFixed(2)}${sig ? `<sup style="font-size:.65em;opacity:.9">${sig}</sup>` : ""}
                 </td>`;
       }).join("");
@@ -610,6 +655,10 @@ const BehaviorCorrelationTab = (() => {
         ${cells}
       </tr>`;
     }).join("");
+
+    const filteredNote = !isUnfiltered
+      ? `<span style="margin-left:8px;font-size:.78em;color:var(--accent3,#f7a44f)">⚑ 已篩選子集（n=${nCount}）即時重算</span>`
+      : (!isSpearman ? `<span style="margin-left:8px;font-size:.78em;opacity:.75">* p&lt;0.05　** p&lt;0.01</span>` : "");
 
     el.innerHTML = `
       <div class="table-responsive">
@@ -628,7 +677,7 @@ const BehaviorCorrelationTab = (() => {
         <span style="background:${_rToColor(0.6)};color:#fff;padding:1px 6px;border-radius:3px">強正相關</span>
         <span style="background:${_rToColor(-0.6)};color:#fff;padding:1px 6px;border-radius:3px;margin-left:4px">強負相關</span>
         <span style="background:${_rToColor(0)};color:var(--text,#dde3f5);padding:1px 6px;border-radius:3px;margin-left:4px">無相關</span>
-        ${!isSpearman ? `<span style="margin-left:8px;font-size:.78em;opacity:.75">* p&lt;0.05　** p&lt;0.01</span>` : ""}
+        ${filteredNote}
       </p>`;
   }
 
