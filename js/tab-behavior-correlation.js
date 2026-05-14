@@ -273,7 +273,6 @@ const BehaviorCorrelationTab = (() => {
       _filterOutlier  = false;
 
       _renderFilterBar(heatmapId);
-      _renderInsightsBadge(heatmapId);
       _applyFiltersAndRender(heatmapId, scatterWrapperId);
     } catch (err) {
       BehaviorLoader.showError("tab-correlation", err.message);
@@ -466,7 +465,8 @@ const BehaviorCorrelationTab = (() => {
     const countEl = document.getElementById("corrFilterCount");
     if (countEl) countEl.textContent = `共 ${count} 筆`;
 
-    // 熱力圖與散佈圖同步使用篩選後資料
+    // 熱力圖、Badge 與散佈圖同步使用篩選後資料
+    _renderInsightsBadge(heatmapId, filtered);
     _renderHeatmap(heatmapId, filtered);
     _renderScatterSelector(scatterWrapperId, filtered);
     _renderLaggedSection(scatterWrapperId);
@@ -693,8 +693,12 @@ const BehaviorCorrelationTab = (() => {
   /**
    * Ph2b B6：最高相關指標 Badge + score_delta / cramming 洞察摘要。
    * 插入於熱力圖容器上方；無 correlation_insights 資料時靜默不顯示。
+   *
+   * FIX：接受 filteredRows 參數。
+   *   • 全量模式：讀 ETL 預算值 _corrData.correlation_insights（原行為）
+   *   • 篩選模式：以 _pearsonValue / _spearmanValue 即時重算三項指標
    */
-  function _renderInsightsBadge(insertBeforeId) {
+  function _renderInsightsBadge(insertBeforeId, filteredRows) {
     const anchor = document.getElementById(insertBeforeId);
     if (!anchor) return;
 
@@ -704,34 +708,99 @@ const BehaviorCorrelationTab = (() => {
     const ci = _corrData?.correlation_insights;
     if (!ci) return;
 
+    const isUnfiltered = (
+      _filterSemester === "all" &&
+      _filterCluster  === "all" &&
+      _filterPass     === "all" &&
+      _filterEduType  === "all" &&
+      !_filterOutlier
+    );
+
     const lines = [];
 
-    // 最高相關指標
-    const hr = ci.highest_r_feature;
-    if (hr?.feature && hr?.r != null) {
-      const featLabel   = FEAT_LABELS[hr.feature]   || hr.feature;
-      const targetLabel = GRADE_LABELS[hr.target]   || hr.target;
-      const rSign       = hr.r >= 0 ? "+" : "";
+    /**
+     * 取 r 值的統一入口：
+     *   全量 → ETL 預算值；篩選 → 即時重算。
+     */
+    function _liveR(feat, target) {
+      if (isUnfiltered) {
+        return _pearson(feat, target);
+      }
+      const rows = Array.isArray(filteredRows) ? filteredRows : (_lastFiltered ?? _allScatterData ?? []);
+      return (_corrType === "spearman")
+        ? _spearmanValue(rows, feat, target)
+        : _pearsonValue(rows, feat, target);
+    }
+
+    const nSuffix = (!isUnfiltered && Array.isArray(filteredRows))
+      ? ` <span style="opacity:.65;font-size:.75em">n=${filteredRows.length}</span>`
+      : "";
+
+    // ── 最高相關指標（依篩選後資料重新搜尋最高 |r|）─────────
+    if (isUnfiltered) {
+      // 全量：直接用 ETL 欄位
+      const hr = ci.highest_r_feature;
+      if (hr?.feature && hr?.r != null) {
+        const rSign = hr.r >= 0 ? "+" : "";
+        lines.push(
+          `🏆 <strong>最高相關指標</strong>：${FEAT_LABELS[hr.feature] || hr.feature} × ${GRADE_LABELS[hr.target] || hr.target}　<code>r = ${rSign}${hr.r.toFixed(3)}</code>`
+        );
+      }
+    } else {
+      // 篩選：掃描所有 feat×target 取最高 |r|
+      const rows = Array.isArray(filteredRows) ? filteredRows : (_lastFiltered ?? _allScatterData ?? []);
+      let bestFeat = null, bestTarget = null, bestR = null;
+      for (const feat of _features()) {
+        for (const target of _targets()) {
+          const r = _pearsonValue(rows, feat, target);
+          if (r !== null && (bestR === null || Math.abs(r) > Math.abs(bestR))) {
+            bestFeat = feat; bestTarget = target; bestR = r;
+          }
+        }
+      }
+      if (bestFeat && bestR !== null) {
+        const rSign = bestR >= 0 ? "+" : "";
+        lines.push(
+          `🏆 <strong>最高相關指標</strong>：${FEAT_LABELS[bestFeat] || bestFeat} × ${GRADE_LABELS[bestTarget] || bestTarget}　<code>r = ${rSign}${bestR.toFixed(3)}</code>${nSuffix}`
+        );
+      }
+    }
+
+    // ── score_delta 相關性 ───────────────────────────────────
+    const sdFeat = "quz_score_delta";
+    // 嘗試從 correlation_insights 取得目標欄位名稱，fallback 到 final_score / grade_final
+    const sdTarget = ci.score_delta_correlation?.target || "final_score";
+    const sdR = _liveR(sdFeat, sdTarget)
+             ?? _liveR(sdFeat, "grade_final")
+             ?? _liveR(sdFeat, "grade_total");
+    if (sdR != null) {
+      const sign = sdR >= 0 ? "+" : "";
       lines.push(
-        `🏆 <strong>最高相關指標</strong>：${featLabel} × ${targetLabel}　<code>r = ${rSign}${hr.r.toFixed(3)}</code>`
+        `📈 <strong>成績進步幅度</strong> × 期末成績：<code>r = ${sign}${sdR.toFixed(3)}</code>${nSuffix}`
+      );
+    } else if (isUnfiltered && ci.score_delta_correlation?.final != null) {
+      // 全量 fallback：直接讀 ETL 欄位（feat key 不在 scatter 時）
+      const sign = ci.score_delta_correlation.final >= 0 ? "+" : "";
+      lines.push(
+        `📈 <strong>成績進步幅度</strong> × 期末成績：<code>r = ${sign}${ci.score_delta_correlation.final.toFixed(3)}</code>`
       );
     }
 
-    // score_delta 相關性
-    const sd = ci.score_delta_correlation;
-    if (sd?.final != null) {
-      const sign = sd.final >= 0 ? "+" : "";
+    // ── cramming_ratio 相關性 ────────────────────────────────
+    const crFeat = "quz_cramming_ratio";
+    const crTarget = ci.cramming_correlation?.target || "final_score";
+    const crR = _liveR(crFeat, crTarget)
+             ?? _liveR(crFeat, "grade_final")
+             ?? _liveR(crFeat, "grade_total");
+    if (crR != null) {
+      const sign = crR >= 0 ? "+" : "";
       lines.push(
-        `📈 <strong>成績進步幅度</strong> × 期末成績：<code>r = ${sign}${sd.final.toFixed(3)}</code>`
+        `🕐 <strong>考前7天刷題比</strong> × 期末成績：<code>r = ${sign}${crR.toFixed(3)}</code>${nSuffix}`
       );
-    }
-
-    // cramming_ratio 相關性
-    const cr = ci.cramming_correlation;
-    if (cr?.final != null) {
-      const sign = cr.final >= 0 ? "+" : "";
+    } else if (isUnfiltered && ci.cramming_correlation?.final != null) {
+      const sign = ci.cramming_correlation.final >= 0 ? "+" : "";
       lines.push(
-        `🕐 <strong>考前7天刷題比</strong> × 期末成績：<code>r = ${sign}${cr.final.toFixed(3)}</code>`
+        `🕐 <strong>考前7天刷題比</strong> × 期末成績：<code>r = ${sign}${ci.cramming_correlation.final.toFixed(3)}</code>`
       );
     }
 
