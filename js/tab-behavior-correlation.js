@@ -409,6 +409,25 @@ const BehaviorCorrelationTab = (() => {
     _applyFiltersAndRender("corrHeatmap", "scatterSection");
   }
 
+  function resetFilters() {
+    _filterSemester = "all";
+    _filterCluster  = "all";
+    _filterPass     = "all";
+    _filterEduType  = "all";
+    _filterOutlier  = false;
+    _lastFilterKey  = null;
+    // Sync selects back to "all"
+    const semEl     = document.getElementById("corrSemFilter");
+    const clusterEl = document.getElementById("corrClusterFilter");
+    const passEl    = document.getElementById("corrPassFilter");
+    const outlierEl = document.getElementById("corrOutlierToggle");
+    if (semEl)     semEl.value     = "all";
+    if (clusterEl) clusterEl.value = "all";
+    if (passEl)    passEl.value    = "all";
+    if (outlierEl) outlierEl.checked = false;
+    _applyFiltersAndRender("corrHeatmap", "scatterSection");
+  }
+
   // ── 取得篩選後資料 ────────────────────────────────────────
 
   // ── 篩選快取：條件未變時不重新過濾 ──────────────────────
@@ -1050,5 +1069,5 @@ const BehaviorCorrelationTab = (() => {
     });
   }
 
-  return { init, showScatter, onFilterChange, setCorrType };
+  return { init, showScatter, onFilterChange, resetFilters, setCorrType };
 })();

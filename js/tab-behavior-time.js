@@ -945,9 +945,24 @@ const BehaviorTimeTab = (() => {
   }
 
   // ── 公開 API ─────────────────────────────────────────────────
+  function resetFilters() {
+    _filterSemester = "all";
+    _filterCluster  = "all";
+    _filterPass     = "all";
+    // Sync all filter selects back to "all"
+    const semIds     = ["timeSemFilter",     "preExamSemFilter",     "tsDonutSemFilter"];
+    const clusterIds = ["timeClusterFilter", "preExamClusterFilter", "tsDonutClusterFilter"];
+    const passIds    = ["timePassFilter",    "preExamPassFilter",    "tsDonutPassFilter"];
+    semIds    .forEach(id => { const el = document.getElementById(id); if (el) el.value = "all"; });
+    clusterIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = "all"; });
+    passIds   .forEach(id => { const el = document.getElementById(id); if (el) el.value = "all"; });
+    _renderAll();
+  }
+
   return {
     init,
     onFilterChange,
+    resetFilters,
     renderWeeklyQuiz,
     renderPreExamIntensity,
     renderTimeSlotDonut,
