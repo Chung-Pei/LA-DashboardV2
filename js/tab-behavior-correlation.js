@@ -469,15 +469,19 @@ const BehaviorCorrelationTab = (() => {
     _renderInsightsBadge(heatmapId, filtered);
     _renderHeatmap(heatmapId, filtered);
     _renderScatterSelector(scatterWrapperId, filtered);
-    _renderLaggedSection(scatterWrapperId);
+    _renderLaggedSection(scatterWrapperId, filtered);   // ← 傳入篩選後資料
   }
 
   /**
    * C3：時間滯後相關性摘要表。
-   * 讀取 _corrData.lagged_pearson（ETL 產出），插入於散佈圖容器下方。
+   * 讀取 _corrData.lagged_pearson（ETL 產出結構），插入於散佈圖容器下方。
+   * 篩選模式下，r 值以 _pearsonValue/_spearmanValue 即時重算取代 ETL 靜態值。
    * 無資料時靜默不顯示。
+   *
+   * @param {string} afterId        - DOM 容器 id
+   * @param {Array|null} filteredRows - 篩選後資料列；null 表示全量模式
    */
-  function _renderLaggedSection(afterId) {
+  function _renderLaggedSection(afterId, filteredRows) {
     const anchor = document.getElementById(afterId);
     if (!anchor) return;
 
@@ -491,8 +495,48 @@ const BehaviorCorrelationTab = (() => {
     const frontLabel = GRADE_LABELS[front_target] || front_target;
     const backLabel  = GRADE_LABELS[back_target]  || back_target;
 
-    // 只顯示 front 或 back 有顯著相關（|r|≥0.1）的特徵，依 |lag_delta| 降序
+    // 判斷是否為全量模式（篩選器皆為 all）
+    const isUnfiltered = (
+      _filterSemester === "all" &&
+      _filterCluster  === "all" &&
+      _filterPass     === "all" &&
+      _filterEduType  === "all" &&
+      !_filterOutlier
+    );
+
+    // 篩選模式下即時重算 r 值，取代 ETL 靜態值
+    const activeRows = (!isUnfiltered && Array.isArray(filteredRows) && filteredRows.length > 0)
+      ? filteredRows
+      : null;
+
+    function _getLagR(feat, target) {
+      if (activeRows) {
+        // 篩選子集即時重算
+        return (_corrType === "spearman")
+          ? _spearmanValue(activeRows, feat, target)
+          : _pearsonValue(activeRows, feat, target);
+      }
+      // 全量：用 ETL 預算值
+      return results[feat]?.[target === front_target ? "front" : "back"]?.r ?? null;
+    }
+
+    const nSuffix = activeRows
+      ? ` <span style="opacity:.6;font-size:.75em">n=${activeRows.length}</span>`
+      : "";
+
+    // 重建 rows：篩選模式下動態計算 front r / back r / lag_delta
     const rows = Object.entries(results)
+      .map(([feat, v]) => {
+        if (!activeRows) return [feat, v];  // 全量：直接用 ETL 值
+        const fr = _pearsonValue(activeRows, feat, front_target);
+        const br = _pearsonValue(activeRows, feat, back_target);
+        const lagDelta = (fr != null && br != null) ? +(br - fr).toFixed(4) : null;
+        return [feat, {
+          front: fr != null ? { r: fr, p: null, significant: false } : null,
+          back:  br != null ? { r: br, p: null, significant: false } : null,
+          lag_delta: lagDelta,
+        }];
+      })
       .filter(([, v]) => {
         const fr = v.front?.r, br = v.back?.r;
         return (fr != null && Math.abs(fr) >= 0.1) || (br != null && Math.abs(br) >= 0.1);
@@ -506,10 +550,14 @@ const BehaviorCorrelationTab = (() => {
       const r   = stat.r;
       const bg  = _rToColor(r);
       const tc  = Math.abs(r) > 0.45 ? "#fff" : "var(--text,#dde3f5)";
-      const sig = stat.significant ? "*" : "";
+      // 篩選模式下 p-value 無法可靠估算，顯示 n= 取代；全量模式顯示 sig 星號
+      const sig = (!activeRows && stat.significant) ? "*" : "";
+      const tipDetail = activeRows
+        ? `n=${activeRows.length}`
+        : (stat.p != null ? `p=${stat.p < 1e-6 ? "<0.000001" : stat.p?.toFixed(4)}` : "");
       return `<td class="text-center small"
                   style="background:${bg};color:${tc}"
-                  title="r=${r >= 0 ? "+" : ""}${r.toFixed(3)} p=${stat.p < 1e-6 ? "<0.000001" : stat.p?.toFixed(4)}">
+                  title="r=${r >= 0 ? "+" : ""}${r.toFixed(3)} ${tipDetail}">
                 ${r >= 0 ? "+" : ""}${r.toFixed(2)}${sig}
               </td>`;
     };
