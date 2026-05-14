@@ -537,7 +537,9 @@ const BehaviorRadarTab = (() => {
 
   function resetFilters(){
     _selectedSemester="all";_selectedCluster="P0";_passFilter="all";_semesterFilterNote=null;
-    _renderControls("radarControls");_renderClusterCards("clusterSummaryCards");renderRadar("radarChart");
+    _renderBehaviorMetaStrip();
+    _renderControls("radarControls");renderClusterSummary("clusterSummaryCards");_renderRadar("radarChart");
+    _renderInsights();
     const ins=document.getElementById("radarInsightsPanel");if(ins)ins.style.display="none";
   }
   return{init,switchView,toggleCluster,renderClusterSummary,onYearChange,selectCluster,selectPassFilter,exportClusterCSV,resetFilters};
