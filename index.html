@@ -23,11 +23,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 
 <!-- PWACompat：自動產生所有 Splash Screen，免手動維護 -->
-<!-- ⚠ 安全建議：建議將 pwacompat.min.js 改為本地部署，或加入 integrity SRI hash。
-     取得方式：curl -s https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js | openssl dgst -sha384 -binary | base64
-     加上 integrity="sha384-HASH" 後可消除供應鏈風險。-->
+
 <script async src="https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<!-- Chart.js：不加 integrity SRI，避免 CDN 壓縮版本 hash 不符導致靜默載入失敗 -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
         crossorigin="anonymous"></script>
 <style>
@@ -1158,7 +1155,42 @@ body.light .subject-input {
   color: var(--text-dim);
   font-size: 11px;
 }
+
+/* ── 規則五：重修生全域開關 ── */
+.retaker-switch {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 11px; border-radius: 20px; cursor: pointer;
+  font-size: 10px; font-family: 'Noto Sans TC', sans-serif;
+  border: 1px solid var(--border2); background: var(--surface2);
+  color: var(--text-dim); transition: all 0.15s; white-space: nowrap;
+  flex-shrink: 0;
+}
+.retaker-switch.active {
+  border-color: var(--accent4); background: rgba(155,89,182,0.15);
+  color: var(--accent4); font-weight: 700;
+}
+.retaker-switch.locked {
+  opacity: 0.55; cursor: not-allowed; pointer-events: none;
+}
+
+/* ── 篩選器收合摘要列 ── */
+.filter-collapse-bar {
+  display: none; align-items: center; gap: 8px;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  background: var(--surface2); border: 1px solid var(--border2);
+  margin-bottom: 8px; font-size: 11px; color: var(--text-dim);
+  transition: border-color 0.15s;
+}
+.filter-collapse-bar:hover { border-color: var(--accent); }
+.filter-collapse-bar .collapse-summary {
+  flex: 1; color: var(--text); font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.filter-collapse-bar .collapse-icon { font-size: 12px; }
+.filter-bar.collapsed { display: none !important; }
 </style>
+<!-- 核心篩選邏輯模組 -->
+<script src="filter-engine.js"></script>
 </head>
 <body>
 
@@ -1204,6 +1236,13 @@ body.light .subject-input {
 
 <!-- ══ PANEL A ══ -->
 <div class="panel" id="panelA">
+  <!-- 篩選器收合摘要列 -->
+  <div class="filter-collapse-bar" id="aCollapseBar" onclick="toggleFilterCollapse('A')">
+    <span class="collapse-icon">▶</span>
+    <span class="collapse-summary" id="aCollapseSummary">全部條件</span>
+    <span style="font-size:10px;margin-left:auto">點擊展開篩選器</span>
+  </div>
+
   <div class="filter-bar" id="aFilterBar">
 
     <!-- 1. 學期 -->
@@ -1245,6 +1284,13 @@ body.light .subject-input {
       <span class="filter-label">班級 Class</span>
       <select id="aFilterSheet" onchange="onAFilterChange('class')"></select>
     </div>
+
+    <!-- 重修生全域開關（規則五） -->
+    <button id="aRetakerSwitch" class="retaker-switch active"
+            onclick="toggleRetakerSwitch('A')"
+            title="切換是否包含重修生資料">
+      👤 包含重修生
+    </button>
 
     <!-- 清除所有條件按鈕 -->
     <button id="aResetBtn" onclick="resetAFilters()"
@@ -1358,6 +1404,12 @@ body.light .subject-input {
 
 <!-- ══ PANEL C ══ (整合：全體學生 + 重修分析) -->
 <div class="panel" id="panelC">
+  <!-- 篩選器收合摘要列 -->
+  <div class="filter-collapse-bar" id="cCollapseBar" onclick="toggleFilterCollapse('C')">
+    <span class="collapse-icon">▶</span>
+    <span class="collapse-summary" id="cCollapseSummary">全部條件</span>
+    <span style="font-size:10px;margin-left:auto">點擊展開篩選器</span>
+  </div>
 
   <!-- ── 模式切換（常駐頂部） ── -->
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -1607,6 +1659,13 @@ body.light .subject-input {
 
 <!-- ══ PANEL D ══ -->
 <div class="panel active" id="panelD">
+  <!-- 篩選器收合摘要列 -->
+  <div class="filter-collapse-bar" id="dCollapseBar" onclick="toggleFilterCollapse('D')">
+    <span class="collapse-icon">▶</span>
+    <span class="collapse-summary" id="dCollapseSummary">全部條件</span>
+    <span style="font-size:10px;margin-left:auto">點擊展開篩選器</span>
+  </div>
+
   <!-- ── 學期雙模選擇器 ── -->
   <div class="filter-bar" id="dSemFilterBar">
     <div class="filter-pair" style="align-items:flex-start;flex-wrap:wrap;gap:6px">
@@ -1678,6 +1737,13 @@ body.light .subject-input {
         <button class="mode-btn" id="dMetricFin" onclick="setDMetric('final')">期末</button>
       </div>
     </div>
+
+    <!-- 重修生全域開關（規則五） -->
+    <button id="dRetakerSwitch" class="retaker-switch active"
+            onclick="toggleRetakerSwitch('D')"
+            title="切換是否包含重修生資料">
+      👤 包含重修生
+    </button>
   </div>
 
   <!-- 統計卡 -->
@@ -1799,7 +1865,7 @@ body.light .subject-input {
   </div>
 </div>
 
-<!-- ══ PANEL L (學習行為 Phase 2) ══ -->
+<!-- ══ PANEL L (學習行為) ══ -->
 <div class="panel" id="panelL">
   <div class="chart-card" style="padding:16px">
 
@@ -1815,7 +1881,7 @@ body.light .subject-input {
         </div>
       </div>
 
-      <h5 style="margin:0 0 12px;font-weight:600">📊 學習行為分析 <span style="font-size:0.8rem;color:var(--text-dim,#888);font-weight:400">Learning Behavior Phase 2</span></h5>
+      <h5 style="margin:0 0 12px;font-weight:600">📊 學習行為分析 <span style="font-size:0.8rem;color:var(--text-dim,#888);font-weight:400">Learning Behavior</span></h5>
       <div id="behaviorMetaStrip" style="display:none;margin:0 0 14px"></div>
 
       <!-- 子 Tab -->
@@ -3106,8 +3172,8 @@ function init() {
   }
 
   populateFilters();
-  initDSemFilter();  // ← Phase 2：初始化學期雙模選擇器
-  populateCFilterSem(); // ← Phase 4：初始化 Panel C 學期選單
+  initDSemFilter();
+  populateCFilterSem();
   renderD();
   // 掛載說明與放大按鈕（renderD 完成後 DOM 已就緒）
   requestAnimationFrame(() => {
@@ -3168,7 +3234,6 @@ function populateFilters() {
 }
 
 function updateSheetFilter() {
-  // Phase 3：委派給新的 _rebuildSheetOptions，保持向後相容
   const sem  = document.getElementById('aFilterSem').value;
   const type = document.getElementById('aFilterType').value;
   const prog = (document.getElementById('aFilterProgram') || {}).value || 'all';
@@ -3570,6 +3635,8 @@ function renderA() {
     if (trendCard) trendCard.style.display = '';
     renderTrend();
   }
+
+  updateFilterSummary('A');
 }
 
 function renderTrend() {
@@ -3886,6 +3953,7 @@ function renderCView() {
     renderB();
     renderRetakerFirstDist();
   }
+  updateFilterSummary('C');
 }
 
 /* 一次性初始化 Panel C（切換到此頁籤時呼叫） */
@@ -5089,6 +5157,138 @@ function metricField(m) {
 }
 
 // ══════════════════════════════════════════════════════════
+// PHASE 6 — 全域 UX
+// ══════════════════════════════════════════════════════════
+
+// ── 規則五：重修生全域開關 ────────────────────────────────
+const _retakerState = { A: true, D: true, C: true };  // true = 包含
+
+/**
+ * 切換指定面板的重修生開關
+ * 若學制選為「重修生」→ 強制鎖定為包含（規格書規則五）
+ */
+function toggleRetakerSwitch(panel) {
+  const btn = document.getElementById(`${panel.toLowerCase()}RetakerSwitch`);
+  const progEl = document.getElementById(
+    panel === 'A' ? 'aFilterProgram' :
+    panel === 'D' ? 'dFilterProgram' : 'cFilterProgram'
+  );
+  const prog = progEl?.value || 'all';
+
+  // 規則五：重修生學制時強制鎖定
+  if (typeof FilterEngine !== 'undefined' && FilterEngine.isRetakerSwitchLocked(prog)) {
+    return;
+  }
+
+  _retakerState[panel] = !_retakerState[panel];
+  _syncRetakerBtn(panel);
+
+  // 觸發對應 panel 重繪
+  if (panel === 'A') renderA();
+  else if (panel === 'D') renderD();
+  else if (panel === 'C') renderCView();
+}
+
+/** 同步按鈕外觀與 locked 狀態 */
+function _syncRetakerBtn(panel) {
+  const btn = document.getElementById(`${panel.toLowerCase()}RetakerSwitch`);
+  if (!btn) return;
+  const included = _retakerState[panel];
+  btn.className = 'retaker-switch' + (included ? ' active' : '');
+  btn.textContent = included ? '👤 包含重修生' : '👤 排除重修生';
+
+  // 若學制為重修生，鎖定
+  const progEl = document.getElementById(
+    panel === 'A' ? 'aFilterProgram' :
+    panel === 'D' ? 'dFilterProgram' : 'cFilterProgram'
+  );
+  const prog = progEl?.value || 'all';
+  const locked = typeof FilterEngine !== 'undefined'
+    ? FilterEngine.isRetakerSwitchLocked(prog)
+    : false;
+  if (locked) {
+    _retakerState[panel] = true;
+    btn.classList.add('locked');
+    btn.title = '學制選為「重修生」時，必須包含重修生';
+  } else {
+    btn.classList.remove('locked');
+    btn.title = '切換是否包含重修生資料';
+  }
+}
+
+/** 取得目前 panel 的重修生開關狀態（供 render 函式使用） */
+function getIncludeRetaker(panel) {
+  return _retakerState[panel] !== false;
+}
+
+// ── 篩選器收合/展開 ───────────────────────────────────────
+const _filterCollapsed = { A: false, D: false, C: false };
+
+function toggleFilterCollapse(panel) {
+  _filterCollapsed[panel] = !_filterCollapsed[panel];
+  _applyFilterCollapse(panel);
+}
+
+function _applyFilterCollapse(panel) {
+  const collapsed = _filterCollapsed[panel];
+  const collapseBar = document.getElementById(`${panel.toLowerCase()}CollapseBar`);
+  const summaryEl   = document.getElementById(`${panel.toLowerCase()}CollapseSummary`);
+
+  // 找出所有屬於此 panel 的 filter-bar（含 dSemFilterBar）
+  const panelEl = document.getElementById(`panel${panel}`);
+  if (!panelEl) return;
+
+  const filterBars = panelEl.querySelectorAll('.filter-bar');
+  filterBars.forEach(bar => {
+    bar.classList.toggle('collapsed', collapsed);
+  });
+
+  if (collapseBar) {
+    collapseBar.style.display = collapsed ? 'flex' : 'none';
+    const icon = collapseBar.querySelector('.collapse-icon');
+    if (icon) icon.textContent = collapsed ? '▶' : '▼';
+  }
+
+  // 更新摘要文字
+  if (summaryEl && collapsed) {
+    summaryEl.textContent = _buildPanelSummary(panel);
+  }
+}
+
+/** 產生指定 panel 的篩選條件摘要字串 */
+function _buildPanelSummary(panel) {
+  const parts = [];
+  if (panel === 'A' || panel === 'D') {
+    const semEl  = document.getElementById(panel === 'A' ? 'aFilterSem' : null);
+    const progEl = document.getElementById(panel === 'A' ? 'aFilterProgram' : 'dFilterProgram');
+    const typeEl = document.getElementById(panel === 'A' ? 'aFilterType' : null);
+    if (semEl?.value  && semEl.value  !== 'all') parts.push(semLabel(semEl.value));
+    if (progEl?.value && progEl.value !== 'all') parts.push(PROGRAM_LABELS[progEl.value] || progEl.value);
+    if (typeEl?.value && typeEl.value !== 'all') parts.push(typeEl.value === 'theory' ? '正課' : '實驗課');
+    if (panel === 'D' && dSemMode === 'range') {
+      const sems = DATA?.meta?.semesters || [];
+      if (sems.length) parts.unshift(`${semLabel(sems[dSemRange[0]])}–${semLabel(sems[dSemRange[1]])}`);
+    }
+  } else if (panel === 'C') {
+    const semEl  = document.getElementById('cFilterSem');
+    const progEl = document.getElementById('cFilterProgram');
+    if (semEl?.value  && semEl.value  !== 'all') parts.push(semLabel(semEl.value));
+    if (progEl?.value && progEl.value !== 'all') parts.push(PROGRAM_LABELS[progEl.value] || progEl.value);
+    if (cCurrentType !== 'all') parts.push(cCurrentType === 'theory' ? '正課' : '實驗課');
+    if (cCurrentPass !== 'all') parts.push(cCurrentPass === 'pass' ? '及格' : '不及格');
+  }
+  if (!getIncludeRetaker(panel)) parts.push('排除重修生');
+  return parts.length ? parts.join(' · ') : '全部條件';
+}
+
+// ── 更新收合摘要（render 後呼叫）────────────────────────
+function updateFilterSummary(panel) {
+  if (!_filterCollapsed[panel]) return;
+  const summaryEl = document.getElementById(`${panel.toLowerCase()}CollapseSummary`);
+  if (summaryEl) summaryEl.textContent = _buildPanelSummary(panel);
+}
+
+// ══════════════════════════════════════════════════════════
 // PANEL D — 學期雙模選擇器
 // ══════════════════════════════════════════════════════════
 
@@ -5322,6 +5522,8 @@ function renderD() {
   renderHeatmap(filtered);
   renderBoxPlot(allClasses, filterProg);
   renderCorrelation(filtered);
+
+  updateFilterSummary('D');
 }
 
 function renderDTrendMerge(filtered, sems) {
@@ -5638,7 +5840,6 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       const reg = await navigator.serviceWorker.register('./sw.js', { scope: './' });
-      console.log('[PWA] Service Worker registered:', reg.scope);
 
       // 啟動時檢查更新
       reg.addEventListener('updatefound', () => {
@@ -5656,7 +5857,6 @@ if ('serviceWorker' in navigator) {
       }
 
     } catch (err) {
-      console.warn('[PWA] Service Worker registration failed:', err);
     }
   });
 
@@ -6094,8 +6294,6 @@ function doPrint() {
         @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
       </style>
     </head><body>${html}<script>
-      // BUG-6 修正：等待所有圖表 img 載入完成後再列印，
-      // 避免 300ms 固定延遲在圖表量多或 lazy-init 未完成時列印空白
       window.onload = function() {
         var imgs = Array.from(document.images);
         if (!imgs.length) { window.print(); return; }
@@ -6126,7 +6324,7 @@ function doPrint() {
 loadData();
 </script>
 
-<!-- ══ Phase 2 學習行為模組 ══ -->
+<!-- ══ 學習行為模組 ══ -->
 <script src="js/behavior-loader.js?v=20260508a"></script>
 <script src="js/tab-behavior-radar.js?v=20260508a"></script>
 <script src="js/tab-behavior-correlation.js?v=20260508a"></script>
@@ -6174,14 +6372,14 @@ const BehaviorTabManager = (() => {
         await BehaviorCorrelationTab.init('corrHeatmap', 'scatterSection');
         _init.correlation = true;
         didInit = true;
-      } catch (e) { console.warn('correlation init failed', e); }
+      } catch (e) { /* correlation init failed */ }
     }
     if (sub === 'time' && !_init.time) {
       try {
         await BehaviorTimeTab.init();
         _init.time = true;
         didInit = true;
-      } catch (e) { console.warn('time init failed', e); }
+      } catch (e) { /* time init failed */ }
     }
     if (didInit) {
       attachInfoButtons();
