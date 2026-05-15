@@ -24,7 +24,7 @@
 
 <!-- PWACompat：自動產生所有 Splash Screen，免手動維護 -->
 
-<script async src="https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script defer src="https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
         crossorigin="anonymous"></script>
 <!-- Phase 4：用於時序折線圖期中考垂直標注線（@3.0.1 與 Chart.js 4.4.x 相容） -->
@@ -1313,7 +1313,7 @@ body.light .subject-input {
   <!-- 重置提示列（規則四） -->
   <div id="aResetHint" style="display:none;padding:6px 12px;margin-bottom:8px;border-radius:6px;
        font-size:11px;background:rgba(247,164,79,0.10);border:1px solid rgba(247,164,79,0.25);
-       color:var(--accent3);display:flex;align-items:center;gap:10px">
+       color:var(--accent3);align-items:center;gap:10px">
     <span id="aResetHintText"></span>
     <button id="aUndoBtn" onclick="undoAFilterReset()"
             style="padding:2px 10px;border-radius:4px;border:1px solid var(--accent3);
@@ -2134,7 +2134,7 @@ body.light .subject-input {
   <!-- 無資料狀態 -->
   <div id="rNoData" style="display:none;text-align:center;padding:60px 20px;color:var(--text-dim,#888)">
     <div style="font-size:2rem;margin-bottom:8px">📭</div>
-    <div style="font-size:0.9rem">尚無高風險報告資料。<br>請先執行 <code>python lms_etl.py</code>（含成績資料）後重新載入。</div>
+    <div id="rNoDataMsg" style="font-size:0.9rem">尚無高風險報告資料。<br>請先執行 <code>python lms_etl.py</code>（含成績資料）後重新載入。</div>
   </div>
   <!-- 報告主體（資料載入後顯示） -->
   <div id="rContent" style="display:none">
@@ -2532,6 +2532,7 @@ function hideSvgTip() {
 
 // 觸控裝置：tap to show/hide
 document.addEventListener('touchstart', e => {
+  if (svgTip.style.display === 'none') return;
   if (!e.target.closest('[data-svgtip]')) svgTip.style.display = 'none';
 }, { passive: true });
 // NOTE: 移除 document-level mousemove — 改由各 SVG 元素的 mousemove 處理定位，
@@ -6787,7 +6788,7 @@ const AtRiskReportManager = (() => {
       _data = await res.json();
 
       // schema 版本相容檢查（規格書 §7）
-      if (!_data.schema_version || _data.schema_version < '2.0') {
+      if (!_data.schema_version || parseFloat(_data.schema_version) < 2.0) {
         throw new Error(`at_risk_profile.json schema_version 不相容（需 ≥ 2.0，實際 ${_data.schema_version ?? 'unknown'}）。請重新執行 ETL。`);
       }
 
@@ -6803,7 +6804,7 @@ const AtRiskReportManager = (() => {
     } catch(e) {
       document.getElementById('rLoading').style.display = 'none';
       document.getElementById('rNoData').style.display = '';
-      document.getElementById('rNoData').querySelector('div:last-child').textContent =
+      document.getElementById('rNoDataMsg').textContent =
         `無法載入報告資料：${e.message}`;
       console.error('[Phase 4] AtRiskReportManager 初始化失敗', e);
     }
