@@ -27,6 +27,9 @@
 <script async src="https://unpkg.com/pwacompat@2.0.17/pwacompat.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
         crossorigin="anonymous"></script>
+<!-- Phase 4：用於時序折線圖期中考垂直標注線（@3.0.1 與 Chart.js 4.4.x 相容） -->
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"
+        crossorigin="anonymous"></script>
 <style>
 /* Embedded font fallbacks for offline/sandboxed use */
 
@@ -1228,6 +1231,10 @@ body.light .subject-input {
     <span>📊 學習行為</span>
     <span class="tab-label">Learning Behavior</span>
   </button>
+  <button class="tab" onclick="switchTab('R')">
+    <span>🔴 高風險報告</span>
+    <span class="tab-label">At-Risk Report</span>
+  </button>
   <button class="tab" onclick="switchTab('P')">
     <span>🖨 列印</span>
     <span class="tab-label">Print</span>
@@ -2116,6 +2123,61 @@ body.light .subject-input {
 
   </div>
 </div><!-- /panelL -->
+
+<!-- ══ PANEL R (高風險報告) ══ -->
+<div class="panel" id="panelR">
+  <!-- 載入中狀態 -->
+  <div id="rLoading" style="text-align:center;padding:60px 20px;color:var(--text-dim,#888)">
+    <div style="font-size:2rem;margin-bottom:8px">⏳</div>
+    <div style="font-size:0.9rem">載入高風險分析報告中…</div>
+  </div>
+  <!-- 無資料狀態 -->
+  <div id="rNoData" style="display:none;text-align:center;padding:60px 20px;color:var(--text-dim,#888)">
+    <div style="font-size:2rem;margin-bottom:8px">📭</div>
+    <div style="font-size:0.9rem">尚無高風險報告資料。<br>請先執行 <code>python lms_etl.py</code>（含成績資料）後重新載入。</div>
+  </div>
+  <!-- 報告主體（資料載入後顯示） -->
+  <div id="rContent" style="display:none">
+
+    <!-- §5.2 班級概況卡片 -->
+    <div id="rCohortSummary" style="display:flex;gap:12px;flex-wrap:wrap;padding:16px 0 8px"></div>
+
+    <!-- §5.3 六維度雷達圖 -->
+    <div style="margin:16px 0">
+      <h3 style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">
+        學習特徵雷達圖
+        <span style="font-size:11px;font-weight:400;color:var(--text-dim)">（正規化 0–100，全體學生為基準）</span>
+      </h3>
+      <div style="max-width:480px;margin:0 auto">
+        <canvas id="rRadarChart" height="360"></canvas>
+      </div>
+    </div>
+
+    <!-- §5.4 時序折線圖 -->
+    <div id="rTemporalSection" style="margin:16px 0;display:none">
+      <h3 style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">
+        週學習活動量時序比較
+        <span style="font-size:11px;font-weight:400;color:var(--text-dim)">（各週平均分鐘數）</span>
+      </h3>
+      <canvas id="rTemporalChart" height="220"></canvas>
+    </div>
+
+    <!-- §5.5 紅旗警示卡 -->
+    <div id="rRedFlags" style="margin:16px 0"></div>
+
+    <!-- §5.6 處方性建議 -->
+    <div id="rPrescriptions" style="margin:16px 0"></div>
+
+    <!-- 匯出按鈕（§6.2） -->
+    <div style="padding:16px 0 32px;text-align:right">
+      <button onclick="exportAtRiskPDF()"
+        style="padding:8px 20px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer">
+        ⬇ 匯出 PDF 報告
+      </button>
+    </div>
+
+  </div><!-- /rContent -->
+</div><!-- /panelR -->
 
 <!-- ══ PANEL P (列印) ══ -->
 <div class="panel" id="panelP">
@@ -5031,8 +5093,8 @@ function renderCorrelation(filtered) {
 
 function switchTab(tab) {
   closeExpandedChart();
-  // Tab 陣列：D, A, C(整合), L, P（已移除獨立 B tab）
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['D','A','C','L','P'][i]===tab));
+  // Tab 陣列：D, A, C(整合), L, R(高風險報告), P（Phase 4 新增 R）
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['D','A','C','L','R','P'][i]===tab));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('panel'+tab);
   if (panel) panel.classList.add('active');
@@ -5051,6 +5113,7 @@ function switchTab(tab) {
       });
     });
   }
+  if (tab === 'R') { AtRiskReportManager.lazyInit(); }
   if (tab === 'P') renderPrintPanel();
   requestAnimationFrame(() => {
     attachInfoButtons();
@@ -6094,7 +6157,7 @@ function getSelectedPrintItems() {
 }
 
 function withPrintablePanelsVisible(task) {
-  const panels = [...document.querySelectorAll('.panel')].filter(p => p.id !== 'panelP');
+  const panels = [...document.querySelectorAll('.panel')].filter(p => p.id !== 'panelP' && p.id !== 'panelR');
   const originals = panels.map(p => ({
     el: p,
     display: p.style.display,
@@ -6407,6 +6470,346 @@ const BehaviorTabManager = (() => {
   }
 
   return { lazyInit, switchSub };
+})();
+
+// ══════════════════════════════════════════════════════════════
+// Phase 4：高風險報告管理器 (AtRiskReportManager)
+// 對應規格書 §5.2–§6.2
+// ══════════════════════════════════════════════════════════════
+const AtRiskReportManager = (() => {
+  let _initialized = false;
+  let _data = null;
+
+  const DATA_PATH = 'data/at_risk_profile.json';
+
+  // ── §5.2 班級概況卡片 ────────────────────────────────────────
+  function renderCohortSummary(cs) {
+    const el = document.getElementById('rCohortSummary');
+    if (!el) return;
+    const cards = [
+      { label: '全體學生', value: cs.total_students, unit: '人', color: 'var(--accent)' },
+      { label: '不及格人數', value: cs.fail_count, unit: '人', color: '#e74c3c' },
+      { label: '及格人數', value: cs.pass_count, unit: '人', color: '#27ae60' },
+      { label: '不及格率', value: cs.fail_rate_pct, unit: '%', color: '#e67e22' },
+    ];
+    el.innerHTML = cards.map(c => `
+      <div style="flex:1;min-width:120px;background:var(--card-bg,#fff);border:1px solid var(--border,#e0e0e0);
+                  border-radius:10px;padding:14px 16px;text-align:center">
+        <div style="font-size:22px;font-weight:700;color:${c.color}">${c.value}<span style="font-size:13px;font-weight:400"> ${c.unit}</span></div>
+        <div style="font-size:11px;color:var(--text-dim,#888);margin-top:4px">${c.label}</div>
+      </div>`).join('');
+  }
+
+  // ── §5.3 六維度雷達圖 ────────────────────────────────────────
+  const RADAR_LABELS = ['TXT 教材完成率','SUP 解鎖教材','TUT 輔導資源','考前學習強度','學習穩定性','AUD 音頻時數'];
+  const RADAR_KEYS   = ['text_material_completion','supplementary_completion','tutoring_resource_rate',
+                        'pre_exam_intensity','learning_stability','audio_material_hours'];
+
+  function renderRadarChart(mc) {
+    const canvas = document.getElementById('rRadarChart');
+    if (!canvas) return;
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+
+    const passVals = RADAR_KEYS.map(k => mc[k]?.pass_median_normalized ?? 0);
+    const failVals = RADAR_KEYS.map(k => mc[k]?.fail_median_normalized ?? 0);
+
+    new Chart(canvas, {
+      type: 'radar',
+      data: {
+        labels: RADAR_LABELS,
+        datasets: [
+          {
+            label: '及格組',
+            data: passVals,
+            backgroundColor: 'rgba(39,174,96,0.15)',
+            borderColor: 'rgba(39,174,96,0.85)',
+            borderWidth: 2,
+            pointBackgroundColor: 'rgba(39,174,96,0.85)',
+            pointRadius: 4,
+          },
+          {
+            label: '不及格組',
+            data: failVals,
+            backgroundColor: 'rgba(231,76,60,0.12)',
+            borderColor: 'rgba(231,76,60,0.85)',
+            borderWidth: 2,
+            pointBackgroundColor: 'rgba(231,76,60,0.85)',
+            pointRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        scales: {
+          r: {
+            min: 0, max: 100,
+            ticks: { stepSize: 20, color: 'var(--text-dim,#888)', font: { size: 10 } },
+            grid: { color: 'var(--border,#e0e0e0)' },
+            pointLabels: { color: 'var(--text,#222)', font: { size: 11 } },
+          }
+        },
+        plugins: {
+          legend: { position: 'bottom', labels: { color: 'var(--text,#222)', font: { size: 12 } } },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const key = RADAR_KEYS[ctx.dataIndex];
+                const mc_item = _data?.metrics_comparison?.[key];
+                const gap = mc_item?.gap_percentage ?? '';
+                return `${ctx.dataset.label}：${ctx.raw.toFixed(1)}（落差 ${gap}）`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  // ── §5.4 時序折線圖 ──────────────────────────────────────────
+  function renderTemporalChart(td) {
+    const section = document.getElementById('rTemporalSection');
+    if (!section || !td?.available) return;
+    section.style.display = '';
+
+    const canvas = document.getElementById('rTemporalChart');
+    if (!canvas) return;
+    const existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+
+    const failSeries = td.weekly_activity_series?.fail_group ?? {};
+    const passSeries = td.weekly_activity_series?.pass_group ?? {};
+    const weeks = Object.keys(failSeries).sort((a,b) => parseInt(a.replace('Week ','')) - parseInt(b.replace('Week ','')));
+
+    // ── R2 降級保障：plugin-annotation try/catch ──
+    let annotationPlugin = {};
+    try {
+      if (window.ChartAnnotation) Chart.register(window.ChartAnnotation);
+      const midWeekLabel = `Week ${td.midterm_week_num}`;
+      const midIdx = weeks.indexOf(midWeekLabel);
+      if (midIdx >= 0) {
+        annotationPlugin = {
+          annotation: {
+            annotations: {
+              midtermLine: {
+                type: 'line',
+                xMin: midIdx, xMax: midIdx,
+                borderColor: 'rgba(231,76,60,0.7)',
+                borderWidth: 2,
+                borderDash: [6, 3],
+                label: {
+                  content: `期中考 W${td.midterm_week_num}`,
+                  display: true,
+                  position: 'start',
+                  color: '#e74c3c',
+                  font: { size: 11 },
+                  backgroundColor: 'rgba(255,255,255,0.85)',
+                }
+              }
+            }
+          }
+        };
+      }
+    } catch(e) {
+      console.warn('[Phase 4] chartjs-plugin-annotation 載入失敗，期中考標注線以文字替代', e);
+    }
+
+    new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: weeks,
+        datasets: [
+          {
+            label: '及格組（週均分鐘）',
+            data: weeks.map(w => passSeries[w] ?? null),
+            borderColor: 'rgba(39,174,96,0.9)',
+            backgroundColor: 'rgba(39,174,96,0.1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+          },
+          {
+            label: '不及格組（週均分鐘）',
+            data: weeks.map(w => failSeries[w] ?? null),
+            borderColor: 'rgba(231,76,60,0.9)',
+            backgroundColor: 'rgba(231,76,60,0.08)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+          },
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { color: 'var(--text,#222)', font: { size: 12 } } },
+          ...annotationPlugin,
+        },
+        scales: {
+          x: { ticks: { color: 'var(--text-dim,#888)', font: { size: 10 } }, grid: { color: 'var(--border,#e0e0e0)' } },
+          y: {
+            ticks: { color: 'var(--text-dim,#888)', font: { size: 10 } },
+            grid: { color: 'var(--border,#e0e0e0)' },
+            title: { display: true, text: '平均分鐘', color: 'var(--text-dim,#888)', font: { size: 11 } },
+          }
+        }
+      }
+    });
+
+    // R2 降級：若 annotation 失敗，以副標題說明期中考週
+    if (!Object.keys(annotationPlugin).length) {
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:11px;color:var(--text-dim,#888);text-align:right;margin-top:4px';
+      note.textContent = `▲ 紅色虛線標注不可用。期中考：Week ${td.midterm_week_num}`;
+      canvas.parentNode.appendChild(note);
+    }
+  }
+
+  // ── §5.5 紅旗警示卡 ──────────────────────────────────────────
+  function renderRedFlags(bm, td) {
+    const el = document.getElementById('rRedFlags');
+    if (!el) return;
+    const flags = [];
+
+    // 低完成率紅旗
+    (bm?.low_completion_flags ?? []).forEach(f => {
+      const labelMap = {
+        text_material_completion: 'TXT 教材完成率',
+        supplementary_completion: 'SUP 門檻解鎖教材',
+        tutoring_resource_rate:   'TUT 輔導資源',
+      };
+      flags.push({
+        icon: '⚠️',
+        title: `${labelMap[f.metric] ?? f.metric} 完成率低於 ${f.threshold_pct}%`,
+        body: `不及格組 ${(f.ratio_in_fail_group*100).toFixed(0)}% 學生低於門檻，及格組僅 ${(f.ratio_in_pass_group*100).toFixed(0)}%。`,
+        color: '#e74c3c',
+      });
+    });
+
+    // 連續零活動紅旗
+    const czw = td?.available ? td.consecutive_zero_weeks : null;
+    if (czw?.fail_group_median >= 2) {
+      flags.push({
+        icon: '🔴',
+        title: `連續零活動週：不及格組中位數 ${czw.fail_group_median} 週`,
+        body: `及格組中位數為 ${czw.pass_group_median} 週。`,
+        color: '#e67e22',
+      });
+    }
+
+    // 期中後衰退紅旗
+    const decayFail = td?.available ? td.post_midterm_decay_rate?.fail_group_median_pct : null;
+    if (decayFail !== null && decayFail <= -35) {
+      flags.push({
+        icon: '📉',
+        title: `期中考後學習量衰退 ${Math.abs(decayFail).toFixed(1)}%`,
+        body: `不及格組期中考後活動量顯著下降，及格組衰退 ${Math.abs(td.post_midterm_decay_rate?.pass_group_median_pct ?? 0).toFixed(1)}%。`,
+        color: '#8e44ad',
+      });
+    }
+
+    if (!flags.length) {
+      el.innerHTML = '<div style="color:var(--text-dim,#888);font-size:13px;padding:8px 0">✅ 本學期無重大紅旗警示。</div>';
+      return;
+    }
+
+    el.innerHTML = `<h3 style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">🚩 紅旗警示</h3>` +
+      flags.map(f => `
+        <div style="display:flex;gap:10px;align-items:flex-start;background:var(--card-bg,#fff);
+                    border-left:4px solid ${f.color};border-radius:6px;padding:10px 14px;margin-bottom:8px;
+                    box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+          <span style="font-size:18px;line-height:1.4">${f.icon}</span>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:${f.color}">${f.title}</div>
+            <div style="font-size:12px;color:var(--text-dim,#888);margin-top:2px">${f.body}</div>
+          </div>
+        </div>`).join('');
+  }
+
+  // ── §5.6 處方性建議 ──────────────────────────────────────────
+  function renderPrescriptions(ps) {
+    const el = document.getElementById('rPrescriptions');
+    if (!el || !ps?.length) return;
+    const severityLabel = { critical: '高優先', warning: '中優先', info: '建議' };
+    const severityColor = { critical: '#e74c3c', warning: '#e67e22', info: '#3498db' };
+    el.innerHTML = `<h3 style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">💡 改善建議</h3>` +
+      ps.map((item, i) => `
+        <div style="background:var(--card-bg,#fff);border:1px solid var(--border,#e0e0e0);border-radius:8px;
+                    padding:12px 14px;margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="background:${severityColor[item.severity]};color:#fff;border-radius:4px;
+                         padding:2px 8px;font-size:11px;font-weight:600">${severityLabel[item.severity] ?? item.severity}</span>
+            <span style="font-size:12px;color:var(--text-dim,#888)">#${i+1}</span>
+          </div>
+          <div style="font-size:13px;color:var(--text);margin-bottom:4px">📌 ${item.finding}</div>
+          <div style="font-size:12px;color:var(--text-dim,#888)">→ ${item.action}</div>
+        </div>`).join('');
+  }
+
+  // ── §6.2 PDF 匯出 ────────────────────────────────────────────
+  window.exportAtRiskPDF = function() {
+    const style = document.createElement('style');
+    style.id = '__rPrintStyle';
+    style.textContent = `
+      @media print {
+        body > *:not(#panelR) { display: none !important; }
+        #panelR { display: block !important; }
+        #rLoading, #rNoData { display: none !important; }
+        #rContent { display: block !important; }
+        .tab-bar, header, #panelR button { display: none !important; }
+        canvas { max-width: 100% !important; }
+      }`;
+    document.head.appendChild(style);
+    window.print();
+    setTimeout(() => document.getElementById('__rPrintStyle')?.remove(), 1000);
+  };
+
+  // ── 主要初始化（lazyInit 模式） ──────────────────────────────
+  async function lazyInit() {
+    if (_initialized) {
+      // 已初始化：resize 圖表
+      requestAnimationFrame(() => {
+        ['rRadarChart','rTemporalChart'].forEach(id => {
+          const c = document.getElementById(id);
+          if (c) { const inst = Chart.getChart(c); if (inst) { inst.resize(); inst.update('none'); } }
+        });
+      });
+      return;
+    }
+
+    document.getElementById('rLoading').style.display = '';
+    document.getElementById('rNoData').style.display = 'none';
+    document.getElementById('rContent').style.display = 'none';
+
+    try {
+      const res = await fetch(DATA_PATH, { cache: 'no-cache' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      _data = await res.json();
+
+      // schema 版本相容檢查（規格書 §7）
+      if (!_data.schema_version || _data.schema_version < '2.0') {
+        throw new Error(`at_risk_profile.json schema_version 不相容（需 ≥ 2.0，實際 ${_data.schema_version ?? 'unknown'}）。請重新執行 ETL。`);
+      }
+
+      renderCohortSummary(_data.cohort_summary);
+      renderRadarChart(_data.metrics_comparison);
+      renderTemporalChart(_data.temporal_decay);
+      renderRedFlags(_data.behavioral_markers, _data.temporal_decay);
+      renderPrescriptions(_data.prescriptive_summary);
+
+      document.getElementById('rLoading').style.display = 'none';
+      document.getElementById('rContent').style.display = '';
+      _initialized = true;
+    } catch(e) {
+      document.getElementById('rLoading').style.display = 'none';
+      document.getElementById('rNoData').style.display = '';
+      document.getElementById('rNoData').querySelector('div:last-child').textContent =
+        `無法載入報告資料：${e.message}`;
+      console.error('[Phase 4] AtRiskReportManager 初始化失敗', e);
+    }
+  }
+
+  return { lazyInit };
 })();
 </script>
 </body>
