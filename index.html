@@ -999,8 +999,7 @@ body.light .behavior-range-badge {
   white-space: nowrap;
 }
 .subject-input {
-  min-width: 84px;
-  width: 84px;
+  white-space: nowrap;
   background: rgba(79,142,247,0.12);
   border: 1px solid rgba(79,142,247,0.25);
   border-radius: 20px;
@@ -1204,8 +1203,7 @@ body.light .subject-input {
   <span class="year-range-badge" id="yearRangeBadge">—</span>
   <span class="year-range-badge behavior-range-badge" id="behaviorRangeBadge" style="display:none">行為 —</span>
   <div class="subject-field" id="subjectMeta">
-    <input class="subject-input" id="subjectInput" type="text" placeholder="科目名"
-      oninput="this.dataset.userEdited='true'; updateSubjectDisplay()">
+    <span class="subject-input" id="subjectInput"></span>
   </div>
   <div class="header-meta" id="metaInfo">載入中...</div>
   <button class="meta-toggle" id="metaToggle" onclick="toggleMetaInfo()" aria-expanded="false">資訊</button>
@@ -5141,7 +5139,7 @@ function switchTab(tab) {
 // 深/淺色模式切換
 // ══════════════════════════════════════════════════════════
 function updateSubjectDisplay() {
-  const subj = document.getElementById('subjectInput')?.value?.trim();
+  const subj = document.getElementById('subjectInput')?.textContent?.trim();
   const badge = document.getElementById('yearRangeBadge');
   if (badge && subj) {
     badge.title = '科目：' + subj;
@@ -5154,13 +5152,10 @@ function updateSubjectDisplay() {
  *   1. window.BEHAVIOR_SUMMARY.course_name（behavior-loader.js 若有曝露全域）
  *   2. BehaviorRadarTab._meta?.course_name（若 RadarTab 曝露 _meta）
  *   3. fetch data/behavior_summary.json 的 course_name 欄位
- * 僅在 subjectInput 尚未被使用者手動填寫時才覆蓋。
  */
 async function autoFillSubjectFromBehavior() {
   const input = document.getElementById('subjectInput');
   if (!input) return;
-  // 若使用者已手動填入，則不覆蓋
-  if (input.dataset.userEdited === 'true') return;
 
   let courseName = null;
 
@@ -5184,7 +5179,7 @@ async function autoFillSubjectFromBehavior() {
   }
 
   if (courseName) {
-    input.value = courseName;
+    input.textContent = courseName;
     updateSubjectDisplay();
   }
 }
@@ -6388,7 +6383,7 @@ function buildPrintHTML(items) {
   </style><div class="print-report">
     <div style="border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:20px">
       <h1 style="font-size:18px;margin:0">學習分析儀表板</h1>`;
-  const subj = document.getElementById('subjectInput')?.value?.trim();
+  const subj = document.getElementById('subjectInput')?.textContent?.trim();
   if (subj) html += `<div style="font-size:13px;color:#555;margin-top:4px">科目：${escapeHtml(subj)}</div>`;
   html += `<div style="font-size:12px;color:#555;margin-top:4px">輸出年份：${escapeHtml(rangeLabel)}</div>`;
   const meta = document.getElementById('metaInfo')?.textContent;
