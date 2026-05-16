@@ -5178,11 +5178,15 @@ function toggleTheme() {
   const activeTab = document.querySelector('.tab.active');
   if (activeTab) {
     const tabs = [...document.querySelectorAll('.tab')];
-    const tabId = ['D','A','C','B','P'][tabs.indexOf(activeTab)];
+    const tabId = ['D','A','C','L','R','P'][tabs.indexOf(activeTab)];
     if (tabId === 'A') { renderA(); renderTrend(); }
     if (tabId === 'C') renderCView();
     if (tabId === 'D') renderD();
     if (tabId === 'P') renderPrintPanel();
+    // High-risk tab: re-render radar with resolved CSS colors for the new theme
+    if (tabId === 'R' && typeof AtRiskReportManager !== 'undefined' && AtRiskReportManager.reRenderRadar) {
+      AtRiskReportManager.reRenderRadar();
+    }
     // Re-attach chart title buttons after re-render
     requestAnimationFrame(() => {
       attachInfoButtons();
@@ -6677,6 +6681,12 @@ const AtRiskReportManager = (() => {
     const passVals = RADAR_KEYS.map(k => mc[k]?.pass_median_normalized ?? 0);
     const failVals = RADAR_KEYS.map(k => mc[k]?.fail_median_normalized ?? 0);
 
+    // Resolve CSS variables at render time so Chart.js receives actual color strings
+    const cs = getComputedStyle(document.body);
+    const clrText    = cs.getPropertyValue('--text').trim()     || (document.body.classList.contains('light') ? '#1a1d2e' : '#dde3f5');
+    const clrTextDim = cs.getPropertyValue('--text-dim').trim() || '#6b748f';
+    const clrBorder  = cs.getPropertyValue('--border').trim()   || (document.body.classList.contains('light') ? '#c8cce0' : '#2a2f45');
+
     new Chart(canvas, {
       type: 'radar',
       data: {
@@ -6708,13 +6718,14 @@ const AtRiskReportManager = (() => {
         scales: {
           r: {
             min: 0, max: 100,
-            ticks: { stepSize: 20, color: 'var(--text-dim,#888)', font: { size: 10 } },
-            grid: { color: 'var(--border,#e0e0e0)' },
-            pointLabels: { color: 'var(--text,#222)', font: { size: 11 } },
+            ticks: { stepSize: 20, color: clrTextDim, font: { size: 10 }, backdropColor: 'transparent' },
+            grid: { color: clrBorder },
+            angleLines: { color: clrBorder },
+            pointLabels: { color: clrText, font: { size: 11 } },
           }
         },
         plugins: {
-          legend: { position: 'bottom', labels: { color: 'var(--text,#222)', font: { size: 12 } } },
+          legend: { position: 'bottom', labels: { color: clrText, font: { size: 12 } } },
           tooltip: {
             callbacks: {
               label: ctx => {
@@ -6998,7 +7009,10 @@ const AtRiskReportManager = (() => {
     }
   }
 
-  return { lazyInit, filterRadar, switchSemester };
+  return { lazyInit, filterRadar, switchSemester, reRenderRadar: () => {
+    const mc = _currentSemData?.metrics_comparison ?? _data?.metrics_comparison;
+    if (mc) renderRadarChart(mc);
+  }};
 })();
 </script>
 </body>
