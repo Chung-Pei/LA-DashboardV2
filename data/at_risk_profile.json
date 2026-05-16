@@ -13,13 +13,13 @@
   "default_semester": "114(2)",
   "course_id": "1141111900055011A0",
   "course_name": "微生物及免疫學",
-  "generated_at": "2026-05-16T09:03:06.030857",
+  "generated_at": "2026-05-16T19:38:44.749950",
   "by_semester": {
     "111(1)": {
       "semester": "111(1)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:05.999215",
+      "generated_at": "2026-05-16T19:38:44.714364",
       "cohort_summary": {
         "total_students": 443,
         "fail_count": 33,
@@ -108,7 +108,7 @@
       "semester": "111(2)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:06.004452",
+      "generated_at": "2026-05-16T19:38:44.719603",
       "cohort_summary": {
         "total_students": 193,
         "fail_count": 32,
@@ -203,7 +203,7 @@
       "semester": "112(1)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:06.007365",
+      "generated_at": "2026-05-16T19:38:44.722993",
       "cohort_summary": {
         "total_students": 460,
         "fail_count": 52,
@@ -299,7 +299,7 @@
       "semester": "112(2)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:06.011409",
+      "generated_at": "2026-05-16T19:38:44.728827",
       "cohort_summary": {
         "total_students": 202,
         "fail_count": 37,
@@ -401,7 +401,7 @@
       "semester": "113(1)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:06.014118",
+      "generated_at": "2026-05-16T19:38:44.732302",
       "cohort_summary": {
         "total_students": 449,
         "fail_count": 29,
@@ -469,7 +469,7 @@
       "semester": "113(2)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:06.020430",
+      "generated_at": "2026-05-16T19:38:44.736599",
       "cohort_summary": {
         "total_students": 198,
         "fail_count": 90,
@@ -571,7 +571,7 @@
       "semester": "114(1)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:06.023587",
+      "generated_at": "2026-05-16T19:38:44.739881",
       "cohort_summary": {
         "total_students": 504,
         "fail_count": 101,
@@ -660,7 +660,7 @@
       "semester": "114(2)",
       "course_id": "1141111900055011A0",
       "course_name": "微生物及免疫學",
-      "generated_at": "2026-05-16T09:03:06.028326",
+      "generated_at": "2026-05-16T19:38:44.747480",
       "cohort_summary": {
         "total_students": 248,
         "fail_count": 248,
