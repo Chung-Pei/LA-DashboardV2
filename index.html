@@ -95,16 +95,19 @@ body {
   font-size: 13px;
   line-height: 1.6;
   min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* ── HEADER ── */
 header {
-  height: var(--header-h);
+  height: calc(var(--header-h) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 20px;
+  padding-right: 20px;
+  padding-left: 20px;
   gap: 14px;
   position: sticky;
   top: 0;
@@ -150,7 +153,7 @@ header {
   padding: 0 20px;
   gap: 2px;
   position: sticky;
-  top: var(--header-h);
+  top: calc(var(--header-h) + env(safe-area-inset-top));
   z-index: 190;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -274,6 +277,12 @@ select option {
     min-width: 0;
   }
   .filter-sep { display: none; }
+  .behavior-radar-wrap { height: 300px; }
+  /* 雷達圖頁面：縮緊卡片 padding 和標題 margin，減少上下留白 */
+  #sub-radar .chart-card { padding: 10px; }
+  #sub-radar .chart-title { margin-bottom: 8px; font-size: 10px; }
+  #radarControls { margin-bottom: 5px !important; }
+  #clusterSummaryCards { margin-bottom: 5px !important; }
 }
 
 /* ── STAT CARDS ── */
@@ -329,6 +338,7 @@ select option {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  position: relative;
 }
 .chart-title .dot {
   width: 6px; height: 6px;
@@ -412,15 +422,6 @@ body.chart-expanded-open { overflow: hidden; }
   .behavior-time-grid { grid-template-columns: 1fr; }
   .behavior-radar-wrap { height: 360px; }
 }
-@media (max-width: 600px) {
-  .behavior-radar-wrap { height: 300px; }
-  /* 雷達圖頁面：縮緊卡片 padding 和標題 margin，減少上下留白 */
-  #sub-radar .chart-card { padding: 10px; }
-  #sub-radar .chart-title { margin-bottom: 8px; font-size: 10px; }
-  #radarControls { margin-bottom: 5px !important; }
-  #clusterSummaryCards { margin-bottom: 5px !important; }
-}
-
 /* ── SLOPE CHART ── */
 .slope-wrap { overflow-x: auto; }
 .slope-svg { display: block; min-width: 300px; }
@@ -701,19 +702,62 @@ body.chart-expanded-open { overflow: hidden; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; }
 
+/* ── RANGE SLIDER (dark-mode safe) ── */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border2);
+  outline: none;
+  cursor: pointer;
+  vertical-align: middle;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border2);
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  margin-top: -5px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border2);
+  border: none;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface);
+  cursor: pointer;
+}
+input[type="range"]:focus::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(79,142,247,0.3);
+}
+body.light input[type="range"] {
+  background: var(--border);
+}
+body.light input[type="range"]::-webkit-slider-runnable-track {
+  background: var(--border);
+}
+body.light input[type="range"]::-moz-range-track {
+  background: var(--border);
+}
+
 /* ── PWA / iOS SAFE AREA ── */
-body {
-  /* safe-area 由 header 自行吸收，body 不需重複 padding-top */
-  padding-bottom: env(safe-area-inset-bottom);
-}
-header {
-  /* iOS safe-area: 讓 header 高度自動撐開，tab-bar 跟著偏移 */
-  height: calc(var(--header-h) + env(safe-area-inset-top));
-  padding-top: env(safe-area-inset-top);
-}
-.tab-bar {
-  top: calc(var(--header-h) + env(safe-area-inset-top));
-}
 .panel-wrap {
   padding-top: calc(var(--header-h) + var(--tab-h) + env(safe-area-inset-top));
 }
@@ -949,8 +993,7 @@ body.light .chart-popover {
   font-weight: 700;
   margin-right: 4px;
 }
-/* 讓 chart-title 成為相對定位容器 */
-.chart-title { position: relative; }
+
 
 /* ── 年份範圍標籤 ── */
 .year-range-badge {
