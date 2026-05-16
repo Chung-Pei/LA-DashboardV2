@@ -6599,7 +6599,16 @@ const AtRiskReportManager = (() => {
     const btns    = document.getElementById('rSemesterBtns');
     if (!wrapper || !btns || !semesters?.length) return;
 
-    btns.innerHTML = semesters.map(sem => `
+    // 「全部」按鈕 + 各學期按鈕
+    const allBtn = `
+      <button data-sem="__all__" onclick="AtRiskReportManager.switchSemester('__all__')"
+        style="font-size:12px;padding:4px 14px;border-radius:20px;border:1px solid var(--border,#ccc);
+               background:var(--card-bg,#fff);color:var(--text,#333);cursor:pointer;
+               transition:background .15s,color .15s">
+        全部
+      </button>`;
+
+    btns.innerHTML = allBtn + semesters.map(sem => `
       <button data-sem="${sem}" onclick="AtRiskReportManager.switchSemester('${sem}')"
         style="font-size:12px;padding:4px 14px;border-radius:20px;border:1px solid var(--border,#ccc);
                background:var(--card-bg,#fff);color:var(--text,#333);cursor:pointer;
@@ -6621,19 +6630,30 @@ const AtRiskReportManager = (() => {
     });
   }
 
+  // ── 合併所有學期資料（用於「全部」篩選） ────────────────────
   function switchSemester(sem) {
-    if (!_data?.by_semester?.[sem]) return;
-    _currentSem = sem;
-    _currentSemData = _data.by_semester[sem];
     _radarFilter = null;  // 切換學期時重置雷達篩選狀態
-
     _highlightSemBtn(sem);
 
-    renderCohortSummary(_currentSemData.cohort_summary);
-    renderRadarChart(_currentSemData.metrics_comparison);
-    renderTemporalChart(_currentSemData.temporal_decay);
-    renderRedFlags(_currentSemData.behavioral_markers, _currentSemData.temporal_decay);
-    renderPrescriptions(_currentSemData.prescriptive_summary);
+    let semData;
+    if (sem === '__all__') {
+      // 直接讀 JSON 預算欄位，無前端運算負擔
+      semData = _data.all_semesters;
+      if (!semData) return;
+      _currentSem = '__all__';
+      _currentSemData = semData;
+    } else {
+      if (!_data?.by_semester?.[sem]) return;
+      _currentSem = sem;
+      _currentSemData = _data.by_semester[sem];
+      semData = _currentSemData;
+    }
+
+    renderCohortSummary(semData.cohort_summary);
+    renderRadarChart(semData.metrics_comparison);
+    renderTemporalChart(semData.temporal_decay);
+    renderRedFlags(semData.behavioral_markers, semData.temporal_decay);
+    renderPrescriptions(semData.prescriptive_summary);
 
     // 重置清除按鈕與卡片高亮
     const clearBtn = document.getElementById('rRadarClearBtn');
