@@ -663,10 +663,7 @@ body.chart-expanded-open { overflow: hidden; }
     order: 6;
     flex: 0 0 auto;
   }
-  body .subject-input {
-    padding: 3px 8px;
-  }
-  .meta-toggle {
+.meta-toggle {
     display: inline-flex;
     order: 7;
     align-items: center;
@@ -996,24 +993,6 @@ body.light .behavior-range-badge {
   opacity: 0.7;
   white-space: nowrap;
 }
-.subject-input {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  background: rgba(79,142,247,0.12);
-  border: 1px solid rgba(79,142,247,0.25);
-  border-radius: 20px;
-  color: var(--accent);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 400;
-  padding: 3px 10px;
-}
-body.light .subject-input {
-  background: rgba(46,110,219,0.10);
-  border-color: rgba(46,110,219,0.25);
-}
-
 /* ── 深淺模式切換按鈕 ── */
 .theme-toggle {
   width: 36px;
@@ -1202,7 +1181,7 @@ body.light .subject-input {
   <span class="year-range-badge" id="yearRangeBadge">—</span>
   <span class="year-range-badge behavior-range-badge" id="behaviorRangeBadge" style="display:none">行為 —</span>
   <div class="subject-field" id="subjectMeta">
-    <span class="subject-input" id="subjectInput"></span>
+    <span class="year-range-badge behavior-range-badge" id="subjectInput"></span>
   </div>
   <div class="header-meta" id="metaInfo">載入中...</div>
   <button class="meta-toggle" id="metaToggle" onclick="toggleMetaInfo()" aria-expanded="false">資訊</button>
