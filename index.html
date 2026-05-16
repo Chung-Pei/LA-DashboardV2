@@ -1204,7 +1204,8 @@ body.light .subject-input {
   <span class="year-range-badge" id="yearRangeBadge">—</span>
   <span class="year-range-badge behavior-range-badge" id="behaviorRangeBadge" style="display:none">行為 —</span>
   <div class="subject-field" id="subjectMeta">
-    <input class="subject-input" id="subjectInput" type="text" placeholder="科目名" oninput="updateSubjectDisplay()">
+    <input class="subject-input" id="subjectInput" type="text" placeholder="科目名"
+      oninput="this.dataset.userEdited='true'; updateSubjectDisplay()">
   </div>
   <div class="header-meta" id="metaInfo">載入中...</div>
   <button class="meta-toggle" id="metaToggle" onclick="toggleMetaInfo()" aria-expanded="false">資訊</button>
@@ -5147,6 +5148,47 @@ function updateSubjectDisplay() {
   }
 }
 
+/**
+ * 從學習行為資料自動帶入課程名稱至 subjectInput。
+ * 優先順序：
+ *   1. window.BEHAVIOR_SUMMARY.course_name（behavior-loader.js 若有曝露全域）
+ *   2. BehaviorRadarTab._meta?.course_name（若 RadarTab 曝露 _meta）
+ *   3. fetch data/behavior_summary.json 的 course_name 欄位
+ * 僅在 subjectInput 尚未被使用者手動填寫時才覆蓋。
+ */
+async function autoFillSubjectFromBehavior() {
+  const input = document.getElementById('subjectInput');
+  if (!input) return;
+  // 若使用者已手動填入，則不覆蓋
+  if (input.dataset.userEdited === 'true') return;
+
+  let courseName = null;
+
+  // 優先：全域 BEHAVIOR_SUMMARY（由 behavior-loader.js 曝露）
+  if (!courseName && window.BEHAVIOR_SUMMARY?.course_name) {
+    courseName = window.BEHAVIOR_SUMMARY.course_name;
+  }
+  // 次選：BehaviorRadarTab._meta
+  if (!courseName && typeof BehaviorRadarTab !== 'undefined' && BehaviorRadarTab._meta?.course_name) {
+    courseName = BehaviorRadarTab._meta.course_name;
+  }
+  // Fallback：直接 fetch data/behavior.json（meta.course_name）
+  if (!courseName) {
+    try {
+      const r = await fetch('data/behavior.json', { cache: 'no-cache' });
+      if (r.ok) {
+        const j = await r.json();
+        courseName = j.meta?.course_name ?? j.course_name ?? j.courseName ?? null;
+      }
+    } catch (_) { /* 檔案不存在時靜默忽略 */ }
+  }
+
+  if (courseName) {
+    input.value = courseName;
+    updateSubjectDisplay();
+  }
+}
+
 function toggleMetaInfo() {
   const header = document.querySelector('header');
   const btn = document.getElementById('metaToggle');
@@ -6449,6 +6491,8 @@ const BehaviorTabManager = (() => {
       _init.radar = true;
       attachInfoButtons();
       attachChartExpandButtons();
+      // 自動帶入行為資料的課程名稱至 header 科目欄
+      autoFillSubjectFromBehavior().catch(() => {});
     } catch (e) {
       const el = document.getElementById('tab-behavior');
       if (el) el.innerHTML +=
