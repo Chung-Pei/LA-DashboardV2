@@ -3635,6 +3635,7 @@ function resetAFilters() {
   _applyProgramDisabledState('all');
   _applyTypeLockedState('all');
   _rebuildSheetOptions('all','all','all','semester');
+  document.getElementById('aFilterSheet').value = 'all';
   _hideAResetHint();
   _hideAEmptyHint();
   // 重置重修生開關回「包含」
