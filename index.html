@@ -3637,9 +3637,18 @@ function resetAFilters() {
   _rebuildSheetOptions('all','all','all','semester');
   _hideAResetHint();
   _hideAEmptyHint();
+  // 重置重修生開關回「包含」
+  if (typeof _retakerState !== 'undefined') {
+    _retakerState['A'] = true;
+    if (typeof _syncRetakerBtn === 'function') _syncRetakerBtn('A');
+  }
+  // 若篩選器已收合，重置後展開
+  if (typeof _filterCollapsed !== 'undefined' && _filterCollapsed['A']) {
+    _filterCollapsed['A'] = false;
+    if (typeof _applyFilterCollapse === 'function') _applyFilterCollapse('A');
+  }
   renderA();
 }
-
 /** 防空值提示 */
 function _showAEmptyHint(reason) {
   const el = document.getElementById('aEmptyHint');
@@ -4002,6 +4011,17 @@ function _resetCGeneralFilters() {
     document.getElementById(id)?.classList.toggle('active', i===0));
   ['cPassAll','cPassPass','cPassFail'].forEach((id,i) =>
     document.getElementById(id)?.classList.toggle('active', i===0));
+  // 重置評量指標回「學期」
+  cCurrentExam = 'semester_score';
+  ['cExamSem','cExamMid','cExamFin','cExamSemR','cExamMidR','cExamFinR'].forEach(id =>
+    document.getElementById(id)?.classList.remove('active'));
+  document.getElementById('cExamSem')?.classList.add('active');
+  document.getElementById('cExamSemR')?.classList.add('active');
+  // 清除搜尋學號欄位與下拉結果
+  const searchEl = document.getElementById('cSearch');
+  if (searchEl) searchEl.value = '';
+  const searchBox = document.getElementById('searchResults');
+  if (searchBox) { searchBox.classList.remove('open'); searchBox.innerHTML = ''; }
   // 解鎖課程類型
   ['cTypePrac'].forEach(id => {
     const btn = document.getElementById(id);
