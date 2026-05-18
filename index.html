@@ -6559,14 +6559,42 @@ const AtRiskReportManager = (() => {
   const DATA_PATH = 'data/at_risk_profile.json';
 
   // ── §5.2 班級概況卡片 ────────────────────────────────────────
+  function _toFiniteNumber(value, fallback = 0) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function _normalizeCohortSummary(cs = {}) {
+    const passCount = Math.max(0, Math.round(_toFiniteNumber(cs.pass_count)));
+    const failCount = Math.max(0, Math.round(_toFiniteNumber(cs.fail_count)));
+    const gradedTotal = passCount + failCount;
+    const rawTotal = Math.max(0, Math.round(_toFiniteNumber(cs.total_students, gradedTotal)));
+    const explicitUnsettled = Math.max(0, Math.round(_toFiniteNumber(cs.unsettled_count)));
+    const inferredUnsettled = Math.max(rawTotal - gradedTotal, 0);
+    const unsettledCount = Math.max(explicitUnsettled, inferredUnsettled);
+    const totalStudents = Math.max(rawTotal, gradedTotal + unsettledCount);
+
+    return {
+      total_students: totalStudents,
+      pass_count: passCount,
+      fail_count: failCount,
+      graded_total: gradedTotal,
+      unsettled_count: unsettledCount,
+      fail_rate_pct: gradedTotal > 0 ? +(failCount / gradedTotal * 100).toFixed(1) : null,
+    };
+  }
+
   function renderCohortSummary(cs) {
     const el = document.getElementById('rCohortSummary');
     if (!el) return;
+    const safe = _normalizeCohortSummary(cs);
+    const hasUnsettled = safe.unsettled_count > 0;
     const cards = [
-      { label: '全體學生',  value: cs.total_students, unit: '人', color: 'var(--accent)',  filter: null },
-      { label: '不及格人數', value: cs.fail_count,     unit: '人', color: '#e74c3c',        filter: 'fail' },
-      { label: '及格人數',  value: cs.pass_count,     unit: '人', color: '#27ae60',        filter: 'pass' },
-      { label: '不及格率',  value: cs.fail_rate_pct,  unit: '%',  color: '#e67e22',        filter: null },
+      { label: '全體學生',  value: safe.total_students,    unit: '人', color: 'var(--accent)', filter: null },
+      ...(hasUnsettled ? [{ label: '未結算人數', value: safe.unsettled_count, unit: '人', color: '#8e44ad', filter: null }] : []),
+      { label: '不及格人數', value: safe.fail_count,        unit: '人', color: '#e74c3c',       filter: safe.fail_count > 0 ? 'fail' : null },
+      { label: '及格人數',  value: safe.pass_count,        unit: '人', color: '#27ae60',       filter: safe.pass_count > 0 ? 'pass' : null },
+      { label: '不及格率',  value: safe.fail_rate_pct,     unit: '%',  color: '#e67e22',       filter: null, empty: safe.fail_rate_pct == null },
     ];
     el.innerHTML = cards.map(c => {
       const clickable = c.filter !== null;
@@ -6577,8 +6605,12 @@ const AtRiskReportManager = (() => {
            text-align:center;cursor:pointer;transition:box-shadow .15s,opacity .15s"`
         : `style="flex:1;min-width:120px;background:var(--card-bg,#fff);
            border:1px solid var(--border,#e0e0e0);border-radius:10px;padding:14px 16px;text-align:center"`;
+      const displayValue = c.empty
+        ? '–'
+        : (typeof c.value === 'number' ? c.value.toLocaleString() : c.value);
+      const displayUnit = c.empty ? '' : ` ${c.unit}`;
       return `<div ${clickAttr}>
-        <div style="font-size:22px;font-weight:700;color:${c.color}">${c.value}<span style="font-size:13px;font-weight:400"> ${c.unit}</span></div>
+        <div style="font-size:22px;font-weight:700;color:${c.color}">${displayValue}<span style="font-size:13px;font-weight:400">${displayUnit}</span></div>
         <div style="font-size:11px;color:var(--text-dim,#888);margin-top:4px">${c.label}</div>
       </div>`;
     }).join('');
