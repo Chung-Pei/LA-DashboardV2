@@ -95,19 +95,16 @@ body {
   font-size: 13px;
   line-height: 1.6;
   min-height: 100vh;
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* ── HEADER ── */
 header {
-  height: calc(var(--header-h) + env(safe-area-inset-top));
-  padding-top: env(safe-area-inset-top);
+  height: var(--header-h);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding-right: 20px;
-  padding-left: 20px;
+  padding: 0 20px;
   gap: 14px;
   position: sticky;
   top: 0;
@@ -153,7 +150,7 @@ header {
   padding: 0 20px;
   gap: 2px;
   position: sticky;
-  top: calc(var(--header-h) + env(safe-area-inset-top));
+  top: var(--header-h);
   z-index: 190;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -277,12 +274,6 @@ select option {
     min-width: 0;
   }
   .filter-sep { display: none; }
-  .behavior-radar-wrap { height: 300px; }
-  /* 雷達圖頁面：縮緊卡片 padding 和標題 margin，減少上下留白 */
-  #sub-radar .chart-card { padding: 10px; }
-  #sub-radar .chart-title { margin-bottom: 8px; font-size: 10px; }
-  #radarControls { margin-bottom: 5px !important; }
-  #clusterSummaryCards { margin-bottom: 5px !important; }
 }
 
 /* ── STAT CARDS ── */
@@ -338,7 +329,6 @@ select option {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  position: relative;
 }
 .chart-title .dot {
   width: 6px; height: 6px;
@@ -422,6 +412,15 @@ body.chart-expanded-open { overflow: hidden; }
   .behavior-time-grid { grid-template-columns: 1fr; }
   .behavior-radar-wrap { height: 360px; }
 }
+@media (max-width: 600px) {
+  .behavior-radar-wrap { height: 300px; }
+  /* 雷達圖頁面：縮緊卡片 padding 和標題 margin，減少上下留白 */
+  #sub-radar .chart-card { padding: 10px; }
+  #sub-radar .chart-title { margin-bottom: 8px; font-size: 10px; }
+  #radarControls { margin-bottom: 5px !important; }
+  #clusterSummaryCards { margin-bottom: 5px !important; }
+}
+
 /* ── SLOPE CHART ── */
 .slope-wrap { overflow-x: auto; }
 .slope-svg { display: block; min-width: 300px; }
@@ -702,62 +701,19 @@ body.chart-expanded-open { overflow: hidden; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; }
 
-/* ── RANGE SLIDER (dark-mode safe) ── */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border2);
-  outline: none;
-  cursor: pointer;
-  vertical-align: middle;
-}
-input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border2);
-}
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--surface);
-  margin-top: -5px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
-  cursor: pointer;
-}
-input[type="range"]::-moz-range-track {
-  height: 4px;
-  border-radius: 2px;
-  background: var(--border2);
-  border: none;
-}
-input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--surface);
-  cursor: pointer;
-}
-input[type="range"]:focus::-webkit-slider-thumb {
-  box-shadow: 0 0 0 3px rgba(79,142,247,0.3);
-}
-body.light input[type="range"] {
-  background: var(--border);
-}
-body.light input[type="range"]::-webkit-slider-runnable-track {
-  background: var(--border);
-}
-body.light input[type="range"]::-moz-range-track {
-  background: var(--border);
-}
-
 /* ── PWA / iOS SAFE AREA ── */
+body {
+  /* safe-area 由 header 自行吸收，body 不需重複 padding-top */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+header {
+  /* iOS safe-area: 讓 header 高度自動撐開，tab-bar 跟著偏移 */
+  height: calc(var(--header-h) + env(safe-area-inset-top));
+  padding-top: env(safe-area-inset-top);
+}
+.tab-bar {
+  top: calc(var(--header-h) + env(safe-area-inset-top));
+}
 .panel-wrap {
   padding-top: calc(var(--header-h) + var(--tab-h) + env(safe-area-inset-top));
 }
@@ -993,7 +949,8 @@ body.light .chart-popover {
   font-weight: 700;
   margin-right: 4px;
 }
-
+/* 讓 chart-title 成為相對定位容器 */
+.chart-title { position: relative; }
 
 /* ── 年份範圍標籤 ── */
 .year-range-badge {
@@ -5102,27 +5059,64 @@ function renderBoxPlot(allClasses, filterProg) {
 
 // D3: 人數 vs 及格率 相關性
 function renderCorrelation(filtered) {
-  const pts=filtered.filter(c=>c.count&&c.pass_rate!=null).map(c=>({
-    x:c.count, y:+(c.pass_rate*100).toFixed(1),
-    prog:c.program, sem:c.semester, cls:c.sheet_name
+  const pts = filtered.filter(c => c.count && c.pass_rate != null).map(c => ({
+    x: c.count, y: +(c.pass_rate * 100).toFixed(1),
+    prog: c.program, sem: c.semester, cls: c.sheet_name
   }));
-  mkChart('chartCorrelation',{
-    type:'scatter',
-    data:{ datasets:[{
-      label:'班次',
-      data:pts,
-      backgroundColor:pts.map(p=>PROGRAM_COLORS[p.prog]+'88'),
-      pointRadius:5, pointHoverRadius:7
-    }]},
-    options:{ ...CHART_DEFAULTS,
-      plugins:{...CHART_DEFAULTS.plugins,legend:{display:false},
-        tooltip:{...CHART_DEFAULTS.plugins.tooltip,
-          callbacks:{label:ctx=>`${ctx.raw.cls} ${semLabel(ctx.raw.sem)}  人數:${ctx.raw.x} 及格率:${ctx.raw.y}%`}}},
-      scales:{
-        x:{...CHART_DEFAULTS.scales.x,title:{display:true,text:'班級人數',color:'var(--text-dim)'}},
-        y:{...CHART_DEFAULTS.scales.y,min:0,max:100,title:{display:true,text:'及格率 %',color:'var(--text-dim)'}}
-      }
-    }
+
+  // 從後端讀取預計算回歸結果
+  const reg   = DATA?.meta?.count_passrate_regression;
+  const hasReg = reg?.available === true;
+  const rLabel = hasReg
+    ? `回歸線  r=${reg.r}  y=${reg.slope >= 0 ? '+' : ''}${reg.slope}x${reg.intercept >= 0 ? '+' : ''}${reg.intercept}`
+    : '';
+
+  // 回歸 dataset 僅於有效時加入，避免 Chart.js 遍歷空 dataset
+  const rDataset = hasReg ? [{
+    label:       rLabel,
+    data:        reg.line,
+    type:        'line',
+    borderColor: 'rgba(247,164,79,0.85)',
+    borderWidth: 2,
+    borderDash:  [5, 4],
+    pointRadius: 0,
+    fill:        false,
+    tension:     0,
+  }] : [];
+
+  mkChart('chartCorrelation', {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label:           '班次',
+          data:            pts,
+          backgroundColor: pts.map(p => PROGRAM_COLORS[p.prog] + '88'),
+          pointRadius:     5,
+          pointHoverRadius:7,
+        },
+        ...rDataset,
+      ]
+    },
+    options: { ...CHART_DEFAULTS,
+      plugins: { ...CHART_DEFAULTS.plugins,
+        legend: {
+          display:  hasReg,
+          position: 'bottom',
+          labels:   { color: 'var(--text,#dde3f5)', font: { size: 11 } },
+        },
+        tooltip: { ...CHART_DEFAULTS.plugins.tooltip,
+          callbacks: { label: ctx => {
+            if (ctx.dataset.type === 'line') return null;
+            return `${ctx.raw.cls} ${semLabel(ctx.raw.sem)}  人數:${ctx.raw.x} 及格率:${ctx.raw.y}%`;
+          }}
+        },
+      },
+      scales: {
+        x: { ...CHART_DEFAULTS.scales.x, title: { display: true, text: '班級人數',  color: 'var(--text-dim)' } },
+        y: { ...CHART_DEFAULTS.scales.y, min: 0, max: 100, title: { display: true, text: '及格率 %', color: 'var(--text-dim)' } },
+      },
+    },
   });
 }
 
