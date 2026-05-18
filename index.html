@@ -1559,6 +1559,74 @@ body.light .behavior-range-badge {
 
   <!-- ── 視圖面板：重修分析 ── -->
   <div id="cPanelRetake" class="c-view-panel" style="display:none">
+
+    <!-- 統計卡標題列（含說明按鈕） -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;position:relative">
+      <span style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-dim)">重修概況統計</span>
+      <!-- 問號說明按鈕 -->
+      <button id="bStatsHelpBtn"
+        onclick="toggleBStatsHelp(event)"
+        style="width:20px;height:20px;border-radius:50%;border:1px solid var(--border2);
+               background:var(--surface2);color:var(--text-dim);font-size:11px;font-weight:700;
+               cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
+               flex-shrink:0;transition:all 0.15s;padding:0"
+        onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+        onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text-dim)'"
+        title="說明卡片含義">?</button>
+
+      <!-- 說明彈出面板 -->
+      <div id="bStatsHelpPanel"
+        style="display:none;position:absolute;top:28px;left:0;z-index:300;
+               background:var(--surface);border:1px solid var(--border2);border-radius:10px;
+               padding:14px 16px;min-width:280px;max-width:340px;
+               box-shadow:0 8px 24px rgba(0,0,0,0.18);font-size:12px;line-height:1.6">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span style="font-size:12px;font-weight:700;color:var(--text)">📊 統計卡說明</span>
+          <button onclick="document.getElementById('bStatsHelpPanel').style.display='none'"
+            style="background:none;border:none;color:var(--text-dim);font-size:16px;cursor:pointer;
+                   line-height:1;padding:0 2px" title="關閉">×</button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span style="min-width:10px;height:10px;border-radius:50%;background:var(--accent4);
+                         margin-top:4px;flex-shrink:0;display:inline-block"></span>
+            <div>
+              <div style="font-weight:600;color:var(--text)">重修學生 Retakers</div>
+              <div style="color:var(--text-dim)">在目前篩選條件下，曾重修同一門課的不重複學生人數。</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span style="min-width:10px;height:10px;border-radius:50%;background:var(--green);
+                         margin-top:4px;flex-shrink:0;display:inline-block"></span>
+            <div>
+              <div style="font-weight:600;color:var(--text)">進步 Improved（Δ &gt; 0）</div>
+              <div style="color:var(--text-dim)">重修後成績高於首修成績（分數差 Δ 為正值）的修課次數。</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span style="min-width:10px;height:10px;border-radius:50%;background:var(--red);
+                         margin-top:4px;flex-shrink:0;display:inline-block"></span>
+            <div>
+              <div style="font-weight:600;color:var(--text)">退步 Declined（Δ &lt; 0）</div>
+              <div style="color:var(--text-dim)">重修後成績反而低於首修成績（分數差 Δ 為負值）的修課次數。</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <span style="min-width:10px;height:10px;border-radius:50%;background:var(--accent3);
+                         margin-top:4px;flex-shrink:0;display:inline-block"></span>
+            <div>
+              <div style="font-weight:600;color:var(--text)">平均 Δ Avg Delta（首修 → 重修）</div>
+              <div style="color:var(--text-dim)">所有重修紀錄的「重修分 − 首修分」平均值，正值代表整體有進步，負值代表整體退步。</div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);
+                    font-size:10px;color:var(--text-dim)">
+          ℹ Δ = 重修成績 − 首修成績；統計結果會依上方篩選條件即時更新。
+        </div>
+      </div>
+    </div>
+
     <div class="stat-row" id="bStats" style="margin-bottom:14px"></div>
 
     <div class="filter-bar" style="padding:8px 0;background:none;border:none;margin-bottom:10px">
@@ -7033,6 +7101,21 @@ const AtRiskReportManager = (() => {
     window.print();
     setTimeout(() => document.getElementById('__rPrintStyle')?.remove(), 1000);
   };
+
+  // ── bStats 說明彈出面板 ──────────────────────────────────────
+  window.toggleBStatsHelp = function(e) {
+    e.stopPropagation();
+    const panel = document.getElementById('bStatsHelpPanel');
+    if (!panel) return;
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+  };
+  document.addEventListener('click', function(e) {
+    const panel = document.getElementById('bStatsHelpPanel');
+    const btn   = document.getElementById('bStatsHelpBtn');
+    if (panel && panel.style.display !== 'none' && !panel.contains(e.target) && e.target !== btn) {
+      panel.style.display = 'none';
+    }
+  });
 
   // ── 主要初始化（lazyInit 模式） ──────────────────────────────
   async function lazyInit() {
