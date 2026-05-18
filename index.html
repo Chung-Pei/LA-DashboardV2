@@ -1982,17 +1982,19 @@ body.light .behavior-range-badge {
           <table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:0.82rem">
             <thead>
               <tr style="background:var(--card-bg2,#f8f9fa)">
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">優先</th>
                 <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">代碼</th>
                 <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">名稱</th>
-                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">主要特徵</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">行為特徵</th>
+                <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--border,#e0e0e0);white-space:nowrap">量化判斷條件</th>
               </tr>
             </thead>
             <tbody>
-              <tr><td style="padding:5px 10px;white-space:nowrap">P1</td><td style="padding:5px 10px;white-space:nowrap">影音輔導型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">VID 完成率 ≥ 50% 或 TUT 時間充足</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap">P2</td><td style="padding:5px 10px;white-space:nowrap">彈性聽覺型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">AUD 完成率 ≥ 50%，較少使用影片</td></tr>
-              <tr><td style="padding:5px 10px;white-space:nowrap">P3</td><td style="padding:5px 10px;white-space:nowrap">平均使用型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">各類教材平均使用（預設分群）</td></tr>
-              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap">P4</td><td style="padding:5px 10px;white-space:nowrap">題庫刷題型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">QUZ 作答次數多且佔整體比例高</td></tr>
-              <tr><td style="padding:5px 10px;white-space:nowrap">P5</td><td style="padding:5px 10px;white-space:nowrap">被動低參與型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">總學習時間少、教材多樣性低</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">① 最優先</td><td style="padding:5px 10px;white-space:nowrap">P5</td><td style="padding:5px 10px;white-space:nowrap">被動低參與型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">整體學習量極少，教材使用單一</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">總學習時間 &lt; 120 分鐘 <span style="font-weight:600;color:var(--accent,#1a73e8)">且</span> 教材多樣性分數 ≤ 2</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">②</td><td style="padding:5px 10px;white-space:nowrap">P4</td><td style="padding:5px 10px;white-space:nowrap">題庫刷題型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">高頻次作答，學習以測驗為主</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">QUZ 作答次數 ≥ 20 次 <span style="font-weight:600;color:var(--accent,#1a73e8)">且</span> QUZ 估計時間佔總學習時間 ≥ 40%</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">③</td><td style="padding:5px 10px;white-space:nowrap">P2</td><td style="padding:5px 10px;white-space:nowrap">彈性聽覺型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">偏好音頻教材，影片使用較少</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">AUD 完成率 ≥ 50% <span style="font-weight:600;color:var(--accent,#1a73e8)">且</span> VID 完成率 &lt; 50%</td></tr>
+              <tr><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">④</td><td style="padding:5px 10px;white-space:nowrap">P1</td><td style="padding:5px 10px;white-space:nowrap">影音輔導型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">大量觀看影片或使用輔導資源</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">VID 完成率 ≥ 50% <span style="font-weight:600;color:var(--accent,#1a73e8)">或</span> TUT 投入時間 ≥ 30 分鐘（任一即符合）</td></tr>
+              <tr style="background:var(--card-bg2,#f8f9fa)"><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">⑤ 預設</td><td style="padding:5px 10px;white-space:nowrap">P3</td><td style="padding:5px 10px;white-space:nowrap">平均使用型</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">各類教材均衡使用，無明顯偏重</td><td style="padding:5px 10px;white-space:nowrap;color:var(--text-dim,#888)">以上條件皆不符合（預設分群）</td></tr>
             </tbody>
           </table>
         </div>
