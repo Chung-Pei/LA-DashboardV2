@@ -3822,7 +3822,7 @@ function switchCView(view) {
   const isGeneral = view === 'general';
   document.getElementById('cFilterGeneral').style.display = isGeneral ? '' : 'none';
   document.getElementById('cFilterRetake').style.display  = isGeneral ? 'none' : '';
-  document.getElementById('cResetBtn').style.display      = isGeneral ? '' : 'none';
+  document.getElementById('cResetBtn').style.display      = '';
 
   // 切換時清除所有已選條件（規格書：切換時清除所有）
   if (isGeneral) {
@@ -3909,8 +3909,17 @@ function setCExam(metric) {
 }
 
 function resetCFilters() {
-  _resetCGeneralFilters();
-  renderCView();
+  if (cCurrentView === 'retake') {
+    _resetCRetakeFilters();
+    // 清除後隱藏重修面板，回到等待輸入狀態
+    document.getElementById('cStats').innerHTML = '';
+    document.getElementById('bStats').innerHTML = '';
+    const hint = document.getElementById('cRetakeSearchHint');
+    if (hint) hint.style.display = '';
+  } else {
+    _resetCGeneralFilters();
+    renderCView();
+  }
 }
 
 function _resetCGeneralFilters() {
@@ -3940,6 +3949,15 @@ function _resetCRetakeFilters() {
   if (inp) inp.value = '';
   const box = document.getElementById('searchResultsRetake');
   if (box) { box.classList.remove('open'); box.innerHTML = ''; }
+  // 清除個案結果區
+  const pw = document.getElementById('profileWrap');
+  if (pw) pw.innerHTML = '';
+  // 重置評量指標回「學期」
+  cCurrentExam = 'semester_score';
+  ['cExamSem','cExamMid','cExamFin','cExamSemR','cExamMidR','cExamFinR'].forEach(id =>
+    document.getElementById(id)?.classList.remove('active'));
+  document.getElementById('cExamSem')?.classList.add('active');
+  document.getElementById('cExamSemR')?.classList.add('active');
 }
 
 // ── 重修模式：搜尋學號（必填） ────────────────────────────
