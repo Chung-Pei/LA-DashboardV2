@@ -7,7 +7,7 @@
 const BehaviorLoader = (() => {
   // ── 快取 ──────────────────────────────────────────────────
   const _cache = {};
-  const DATA_VERSION = "20260508a";
+  const DATA_VERSION = "20260518a"; // [Schema 3.0] 升級快取版本
 
   function _withCacheBust(url) {
     const sep = url.includes("?") ? "&" : "?";
@@ -21,7 +21,7 @@ const BehaviorLoader = (() => {
    * @returns {Promise<any>}
    */
   async function fetchJSON(key, url) {
-    if (_cache[key]) return _cache[key];
+    if (key in _cache) return _cache[key];
     const fetchUrl = _withCacheBust(url);
     const res = await fetch(fetchUrl, { cache: "no-store" });
     if (!res.ok) throw new Error(`載入失敗：${url}（${res.status}）`);
