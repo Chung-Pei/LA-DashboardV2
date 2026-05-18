@@ -95,6 +95,7 @@ body {
   font-size: 13px;
   line-height: 1.6;
   min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* ── HEADER ── */
@@ -663,7 +664,7 @@ body.chart-expanded-open { overflow: hidden; }
     order: 6;
     flex: 0 0 auto;
   }
-.meta-toggle {
+  .meta-toggle {
     display: inline-flex;
     order: 7;
     align-items: center;
@@ -702,10 +703,6 @@ body.chart-expanded-open { overflow: hidden; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; }
 
 /* ── PWA / iOS SAFE AREA ── */
-body {
-  /* safe-area 由 header 自行吸收，body 不需重複 padding-top */
-  padding-bottom: env(safe-area-inset-bottom);
-}
 header {
   /* iOS safe-area: 讓 header 高度自動撐開，tab-bar 跟著偏移 */
   height: calc(var(--header-h) + env(safe-area-inset-top));
@@ -1378,13 +1375,8 @@ body.light .behavior-range-badge {
   </div>
 </div>
 
-<!-- ══ PANEL B (legacy hidden shell, keeps bFilterType for renderB() compat) ══ -->
-<div style="display:none">
-  <select id="bFilterType"><option value="theory">正課</option><option value="practicum">實驗</option></select>
-  <button class="mode-btn active" data-legacy="modeBySheet"></button>
-  <button class="mode-btn" data-legacy="modeByStudent"></button>
-</div>
-<div style="display:none" id="panelB"></div>
+<!-- bFilterType: 隱藏的課別選單，供 renderB() 讀取 -->
+<select id="bFilterType" style="display:none"><option value="theory">正課</option><option value="practicum">實驗</option></select>
 
 <!-- ══ PANEL C ══ (整合：全體學生 + 重修分析) -->
 <div class="panel" id="panelC">
@@ -4291,7 +4283,6 @@ function renderB() {
   const retakers = getRetakerRecords();
   const type = document.getElementById('bFilterType').value;
 
-
   // Stats
   const allDeltas = retakers.flatMap(r =>
     r.recs.filter(rec => rec.delta != null).map(rec => rec.delta)
@@ -4647,9 +4638,6 @@ function renderProfile(sid) {
 }
 
 // ══════════════════════════════════════════════════════════
-// TAB SWITCH
-// ══════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════
 // PANEL A — 新增圖表
 // ══════════════════════════════════════════════════════════
 
@@ -4834,15 +4822,25 @@ function renderVarianceBar(sem, sheet) {
 function renderAnomalyDensity() {
   const sems = DATA.meta.semesters;
   const colorMap = { red:'重大違規', yellow:'學習態度異常', blue:'行政缺漏', gray:'特殊身份' };
-  const datasets = Object.entries(colorMap).map(([color, label])=>{
+
+  // 預建 Map：{ color → { semester → count } }，避免 O(sems × students × records) 三重巢狀
+  const countMap = {};
+  Object.keys(colorMap).forEach(c => { countMap[c] = {}; });
+  Object.values(DATA.students).forEach(s => {
+    s.records.forEach(r => {
+      r.exceptions.forEach(e => {
+        if (countMap[e.color]) {
+          countMap[e.color][r.semester] = (countMap[e.color][r.semester] || 0) + 1;
+        }
+      });
+    });
+  });
+
+  const datasets = Object.entries(colorMap).map(([color, label]) => {
     const borderCol = {red:'#f07070',yellow:'#f0c85b',blue:'#5b8af0',gray:'#6b748f'}[color];
     return {
       label,
-      data: sems.map(sem =>
-        Object.values(DATA.students).reduce((cnt, s)=>
-          cnt + s.records.filter(r=>r.semester===sem && r.exceptions.some(e=>e.color===color)).length
-        , 0)
-      ),
+      data: sems.map(sem => countMap[color][sem] || 0),
       borderColor: borderCol,
       backgroundColor: borderCol+'33',
       fill: true, tension:0.3, pointRadius:4, spanGaps:true
@@ -5227,6 +5225,9 @@ function renderCorrelation(filtered) {
   });
 }
 
+// ══════════════════════════════════════════════════════════
+// TAB SWITCH
+// ══════════════════════════════════════════════════════════
 function switchTab(tab) {
   closeExpandedChart();
   // Tab 陣列：D, A, C(整合), L, R(高風險報告), P（Phase 4 新增 R）
@@ -5510,7 +5511,7 @@ function _applyFilterCollapse(panel) {
 function _buildPanelSummary(panel) {
   const parts = [];
   if (panel === 'A' || panel === 'D') {
-    const semEl  = document.getElementById(panel === 'A' ? 'aFilterSem' : null);
+    const semEl  = panel === 'A' ? document.getElementById('aFilterSem') : null;
     const progEl = document.getElementById(panel === 'A' ? 'aFilterProgram' : 'dFilterProgram');
     const typeEl = document.getElementById(panel === 'A' ? 'aFilterType' : null);
     if (semEl?.value  && semEl.value  !== 'all') parts.push(semLabel(semEl.value));
@@ -5602,7 +5603,7 @@ function setDSemMode(mode) {
 }
 
 /** 滑桿變動事件 */
-function onDSemRangeChange() {
+function onDSemRangeChange(event) {
   let start = parseInt(document.getElementById('dSemStart').value, 10);
   let end   = parseInt(document.getElementById('dSemEnd').value, 10);
   // 確保 start ≤ end
@@ -7054,7 +7055,7 @@ const AtRiskReportManager = (() => {
 
     // 期中後衰退紅旗
     const decayFail = td?.available ? td.post_midterm_decay_rate?.fail_group_median_pct : null;
-    if (decayFail !== null && decayFail <= -35) {
+    if (decayFail != null && decayFail <= -35) {
       flags.push({
         icon: '📉',
         title: `期中考後學習量衰退 ${Math.abs(decayFail).toFixed(1)}%`,
