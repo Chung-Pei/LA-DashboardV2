@@ -2,6 +2,8 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; worker-src 'self' blob:;">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>學習數據分析儀表板 · Learning Analytics</title>
 
@@ -2556,15 +2558,26 @@ let svgTipTimer = null;
 
 function showSvgTip(evt, text) {
   clearTimeout(svgTipTimer);
-  // Safe rendering: split on \n, render lines with <b> parsed safely
+  // Safe rendering: DOM-only construction, no innerHTML with user data
   svgTip.innerHTML = '';
   text.split('\n').forEach((line, i) => {
     if (i > 0) svgTip.appendChild(document.createElement('br'));
-    // Allow only <b>…</b> markup, escape everything else
-    const safe = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/&lt;b&gt;(.+?)&lt;\/b&gt;/g, '<b>$1</b>');
+    // Parse <b>…</b> markers using DOM methods only — never innerHTML with user data
+    const boldPattern = /<b>(.*?)<\/b>/g;
+    let lastIndex = 0, match;
     const span = document.createElement('span');
-    span.innerHTML = safe;
+    while ((match = boldPattern.exec(line)) !== null) {
+      if (match.index > lastIndex) {
+        span.appendChild(document.createTextNode(line.slice(lastIndex, match.index)));
+      }
+      const b = document.createElement('b');
+      b.textContent = match[1];
+      span.appendChild(b);
+      lastIndex = boldPattern.lastIndex;
+    }
+    if (lastIndex < line.length) {
+      span.appendChild(document.createTextNode(line.slice(lastIndex)));
+    }
     svgTip.appendChild(span);
   });
   svgTip.style.display = 'block';
@@ -4075,7 +4088,7 @@ function onCRetakeSearch() {
   }
 
   box.innerHTML = results.slice(0, 12).map(r =>
-    `<div class="result-item" onclick="selectRetakeStudent('${escapeHtml(r.id)}')">
+    `<div class="result-item" data-sid="${escapeHtml(r.id)}" onclick="selectRetakeStudent(this.dataset.sid)">
        <span class="result-id">${escapeHtml(r.id)}</span>
        <span class="result-name">${escapeHtml(r.masked || '–')}</span>
      </div>`
@@ -6539,7 +6552,7 @@ function doPrint() {
   const html = buildPrintHTML(items);
 
   // Try window.print() approach first
-  const printWindow = window.open('', '_blank');
+  const printWindow = window.open('', '_blank', 'noopener,noreferrer');
   if (printWindow) {
     printWindow.document.write(`<!DOCTYPE html><html><head>
       <meta charset="UTF-8">
@@ -6709,7 +6722,7 @@ const AtRiskReportManager = (() => {
     el.innerHTML = cards.map(c => {
       const clickable = c.filter !== null;
       const clickAttr = clickable
-        ? `data-filter="${c.filter}" onclick="AtRiskReportManager.filterRadar('${c.filter}')"
+        ? `data-filter="${c.filter}" onclick="AtRiskReportManager.filterRadar(this.dataset.filter)"
            title="點擊聚焦雷達圖" style="flex:1;min-width:120px;background:var(--card-bg,#fff);
            border:1px solid var(--border,#e0e0e0);border-radius:10px;padding:14px 16px;
            text-align:center;cursor:pointer;transition:box-shadow .15s,opacity .15s"`
@@ -6792,7 +6805,7 @@ const AtRiskReportManager = (() => {
       </button>`;
 
     btns.innerHTML = allBtn + semesters.map(sem => `
-      <button data-sem="${sem}" onclick="AtRiskReportManager.switchSemester('${sem}')"
+      <button data-sem="${sem}" onclick="AtRiskReportManager.switchSemester(this.dataset.sem)"
         style="font-size:12px;padding:4px 14px;border-radius:20px;border:1px solid var(--border,#ccc);
                background:var(--card-bg,#fff);color:var(--text,#333);cursor:pointer;
                transition:background .15s,color .15s">
@@ -7074,12 +7087,12 @@ const AtRiskReportManager = (() => {
     el.innerHTML = `<h3 style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">🚩 紅旗警示</h3>` +
       flags.map(f => `
         <div style="display:flex;gap:10px;align-items:flex-start;background:var(--card-bg,#fff);
-                    border-left:4px solid ${f.color};border-radius:6px;padding:10px 14px;margin-bottom:8px;
+                    border-left:4px solid ${escapeHtml(f.color)};border-radius:6px;padding:10px 14px;margin-bottom:8px;
                     box-shadow:0 1px 3px rgba(0,0,0,0.06)">
-          <span style="font-size:18px;line-height:1.4">${f.icon}</span>
+          <span style="font-size:18px;line-height:1.4">${escapeHtml(f.icon)}</span>
           <div>
-            <div style="font-size:13px;font-weight:600;color:${f.color}">${f.title}</div>
-            <div style="font-size:12px;color:var(--text-dim,#888);margin-top:2px">${f.body}</div>
+            <div style="font-size:13px;font-weight:600;color:${escapeHtml(f.color)}">${escapeHtml(f.title)}</div>
+            <div style="font-size:12px;color:var(--text-dim,#888);margin-top:2px">${escapeHtml(f.body)}</div>
           </div>
         </div>`).join('');
   }
@@ -7103,8 +7116,8 @@ const AtRiskReportManager = (() => {
                          padding:2px 8px;font-size:11px;font-weight:600">${severityLabel[item.severity] ?? item.severity}</span>
             <span style="font-size:12px;color:var(--text-dim,#888)">#${i+1}</span>
           </div>
-          <div style="font-size:13px;color:var(--text);margin-bottom:4px">📌 ${item.finding}</div>
-          <div style="font-size:12px;color:var(--text-dim,#888)">→ ${item.action}</div>
+          <div style="font-size:13px;color:var(--text);margin-bottom:4px">📌 ${escapeHtml(item.finding ?? '')}</div>
+          <div style="font-size:12px;color:var(--text-dim,#888)">→ ${escapeHtml(item.action ?? '')}</div>
         </div>`).join('');
   }
 
