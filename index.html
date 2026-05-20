@@ -3289,6 +3289,8 @@ async function loadData() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     DATA = await res.json();
     normalizeData();
+    // S2-E：資料載入後建立班級反查索引（一次性 O(n×m)，後續查詢 O(班級數)）
+    if (typeof FilterEngine !== 'undefined') FilterEngine.buildIndex(DATA);
     init();
   } catch(e) {
     document.getElementById('metaInfo').textContent = `⚠ 無法載入 data/data.json（${e.message}）`;
@@ -6594,10 +6596,11 @@ loadData();
 </script>
 
 <!-- ══ 學習行為模組 ══ -->
-<script src="js/behavior-loader.js?v=20260518a"></script>
-<script src="js/tab-behavior-radar.js?v=20260518a"></script>
-<script src="js/tab-behavior-correlation.js?v=20260518a"></script>
-<script src="js/tab-behavior-time.js?v=20260518a"></script>
+<script defer src="js/chart-registry.js?v=20260518a"></script>
+<script defer src="js/behavior-loader.js?v=20260518a"></script>
+<script defer src="js/tab-behavior-radar.js?v=20260518a"></script>
+<script defer src="js/tab-behavior-correlation.js?v=20260518a"></script>
+<script defer src="js/tab-behavior-time.js?v=20260518a"></script>
 <script>
 // ── 清除條件：各分頁獨立 try/catch 確保互不影響 ──────────
 function resetBehaviorFilters() {
