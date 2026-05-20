@@ -475,8 +475,6 @@ const BehaviorCorrelationTab = (() => {
   }
 
   // ── FIX BUG1：移除 _corrData 覆蓋，改以 filtered 傳遞給下游 ──
-  // 原本 `_corrData = { ..._corrData, scatter_data: filtered }` 會
-  // 覆蓋原始資料，導致下次篩選的基底已是上次的子集，篩選無法還原全量。
   function _applyFiltersAndRender(heatmapId, scatterWrapperId) {
     const filtered = _filteredScatterData();
     const count = Array.isArray(filtered) ? filtered.length : "—";
@@ -484,11 +482,10 @@ const BehaviorCorrelationTab = (() => {
     const countEl = document.getElementById("corrFilterCount");
     if (countEl) countEl.textContent = `共 ${count} 筆`;
 
-    // 熱力圖、Badge 與散佈圖同步使用篩選後資料
     _renderInsightsBadge(heatmapId, filtered);
     _renderHeatmap(heatmapId, filtered);
     _renderScatterSelector(scatterWrapperId, filtered);
-    _renderLaggedSection(scatterWrapperId, filtered);   // ← 傳入篩選後資料
+    _renderLaggedSection(scatterWrapperId, filtered);
   }
 
   /**
@@ -504,8 +501,13 @@ const BehaviorCorrelationTab = (() => {
     const anchor = document.getElementById(afterId);
     if (!anchor) return;
 
+    // BUG-6 修正：若外框已存在，僅更新 tbody，避免整個 DOM 重建造成 Layout Reflow
     const existing = document.getElementById("corrLaggedSection");
-    if (existing) existing.remove();
+    if (existing) {
+      const tbody = existing.querySelector("tbody");
+      if (tbody) { tbody.innerHTML = tableRows; return; }
+      existing.remove();  // 結構不符時才重建
+    }
 
     const lagged = _corrData?.lagged_pearson;
     if (!lagged?.results || !Object.keys(lagged.results).length) return;
@@ -668,12 +670,25 @@ const BehaviorCorrelationTab = (() => {
      *   全量模式 → 優先讀 ETL 預算值（精確且含 p-value）
      *   篩選模式 → 即時重算（_pearsonValue / _spearmanValue）
      */
+    // Phase D：segKey 僅在 eduType === "all" 時有效（ETL 無 eduType 維度預聚合）
+    const _canUseSegPearson = _filterEduType === "all" && !_filterOutlier;
+    const segKey = `${_filterSemester}|${_filterCluster}|${_filterPass}`;
+    const segData = _canUseSegPearson ? (_corrData?.segment_pearson?.[segKey] ?? null) : null;
+
     function _getR(feat, g) {
       if (isUnfiltered) {
         // 全量：讀 ETL 預算值
         return _pearson(feat, g);
       }
-      // 篩選子集：即時重算
+      // Phase D：篩選模式，優先讀 segment_pearson 預聚合
+      if (segData?.pearson) {
+        // 嘗試 {target: {feat: {r,p,...}}} 格式
+        const rObj = segData.pearson[g]?.[feat] ?? segData.pearson[feat]?.[g];
+        if (rObj != null) {
+          return typeof rObj === "object" ? (rObj.r ?? null) : rObj;
+        }
+      }
+      // fallback：即時重算（原有邏輯）
       const rows = Array.isArray(filteredRows) ? filteredRows : (_lastFiltered ?? _allScatterData ?? []);
       return isSpearman
         ? _spearmanValue(rows, feat, g)
@@ -723,8 +738,12 @@ const BehaviorCorrelationTab = (() => {
       </tr>`;
     }).join("");
 
+    const isPrecomputed = !isUnfiltered && segData?.pearson != null;
+    const isLowConf     = isPrecomputed && segData?.low_confidence === true;
     const filteredNote = !isUnfiltered
-      ? `<span style="margin-left:8px;font-size:.78em;color:var(--accent3,#f7a44f)">⚑ 已篩選子集（n=${nCount}）即時重算</span>`
+      ? isPrecomputed
+        ? `<span style="margin-left:8px;font-size:.78em;color:var(--accent3,#f7a44f)">⚑ 已篩選子集（n=${segData.student_count}）預聚合${isLowConf ? "　⚠️ 樣本數較少，r 值僅供參考" : ""}</span>`
+        : `<span style="margin-left:8px;font-size:.78em;color:var(--accent3,#f7a44f)">⚑ 已篩選子集（n=${nCount}）即時重算</span>`
       : (!isSpearman ? `<span style="margin-left:8px;font-size:.78em;opacity:.75">* p&lt;0.05　** p&lt;0.01</span>` : "");
 
     el.innerHTML = `
@@ -814,22 +833,36 @@ const BehaviorCorrelationTab = (() => {
         );
       }
     } else {
-      // 篩選：掃描所有 feat×target 取最高 |r|
-      const rows = Array.isArray(filteredRows) ? filteredRows : (_lastFiltered ?? _allScatterData ?? []);
-      let bestFeat = null, bestTarget = null, bestR = null;
-      for (const feat of _features()) {
-        for (const target of _targets()) {
-          const r = _pearsonValue(rows, feat, target);
-          if (r !== null && (bestR === null || Math.abs(r) > Math.abs(bestR))) {
-            bestFeat = feat; bestTarget = target; bestR = r;
+      // Phase D：篩選模式，優先讀 segment_pearson 預聚合的 highest_r
+      const segKey  = `${_filterSemester}|${_filterCluster}|${_filterPass}`;
+      const _canUseSegBadge = _filterEduType === "all" && !_filterOutlier;
+      const segData = _canUseSegBadge ? (_corrData?.segment_pearson?.[segKey] ?? null) : null;
+      if (segData?.highest_r?.feature) {
+        const hr    = segData.highest_r;
+        const rSign = hr.r >= 0 ? "+" : "";
+        const lowConfWarn = segData.low_confidence
+          ? ` <span style="opacity:.65;font-size:.75em">⚠️ 低信心</span>` : "";
+        lines.push(
+          `🏆 <strong>最高相關指標</strong>：${FEAT_LABELS[hr.feature] || hr.feature} × ${GRADE_LABELS[hr.target] || hr.target}　<code>r = ${rSign}${hr.r.toFixed(3)}</code>${nSuffix}${lowConfWarn}`
+        );
+      } else {
+        // fallback：掃描所有 feat×target 即時取最高 |r|（原有邏輯）
+        const rows = Array.isArray(filteredRows) ? filteredRows : (_lastFiltered ?? _allScatterData ?? []);
+        let bestFeat = null, bestTarget = null, bestR = null;
+        for (const feat of _features()) {
+          for (const target of _targets()) {
+            const r = _pearsonValue(rows, feat, target);
+            if (r !== null && (bestR === null || Math.abs(r) > Math.abs(bestR))) {
+              bestFeat = feat; bestTarget = target; bestR = r;
+            }
           }
         }
-      }
-      if (bestFeat && bestR !== null) {
-        const rSign = bestR >= 0 ? "+" : "";
-        lines.push(
-          `🏆 <strong>最高相關指標</strong>：${FEAT_LABELS[bestFeat] || bestFeat} × ${GRADE_LABELS[bestTarget] || bestTarget}　<code>r = ${rSign}${bestR.toFixed(3)}</code>${nSuffix}`
-        );
+        if (bestFeat && bestR !== null) {
+          const rSign = bestR >= 0 ? "+" : "";
+          lines.push(
+            `🏆 <strong>最高相關指標</strong>：${FEAT_LABELS[bestFeat] || bestFeat} × ${GRADE_LABELS[bestTarget] || bestTarget}　<code>r = ${rSign}${bestR.toFixed(3)}</code>${nSuffix}`
+          );
+        }
       }
     }
 
@@ -1005,8 +1038,9 @@ const BehaviorCorrelationTab = (() => {
       });
     }
 
-    if (_scatterChart) { _scatterChart.destroy(); _scatterChart = null; }
-
+    // REAL-2 修正：統一透過 ChartRegistry 管理，移除直接 destroy 以避免 zombie 拋出
+    ChartRegistry.destroyById("scatterChart");
+    _scatterChart = null;
     _scatterChart = new Chart(canvas.getContext("2d"), {
       type: "scatter",
       data: { datasets },
@@ -1067,6 +1101,7 @@ const BehaviorCorrelationTab = (() => {
         },
       },
     });
+    ChartRegistry.register("scatterChart", _scatterChart);  // BUG-5：登記至 Registry
   }
 
   return { init, showScatter, onFilterChange, resetFilters, setCorrType };

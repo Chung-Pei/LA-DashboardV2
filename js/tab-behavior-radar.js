@@ -56,6 +56,10 @@ const BehaviorRadarTab = (() => {
   let _behaviorStudents=[],_allStudents=[],_allSemesters=[];
   let _selectedSemester="all",_selectedCluster="P0",_passFilter="all",_semesterFilterNote=null;
 
+  // WARN-1：分群計算結果快取（key: `${cluster}|${passFilter}|${semester}` → result）
+  const _computeCache = new Map();
+  function _invalidateComputeCache() { _computeCache.clear(); }
+
   // 模組層級：讀取深色模式，避免每次 render 重建 closure
   function _isDark(){return document.documentElement.classList.contains('dark')||window.matchMedia('(prefers-color-scheme:dark)').matches;}
 
@@ -120,6 +124,7 @@ const BehaviorRadarTab = (() => {
       _behaviorStudents=_enrichBehaviorStudents(behaviorData?.students||[]);_allStudents=_behaviorStudents;
       _allSemesters=Array.isArray(_behaviorMeta.semesters)&&_behaviorMeta.semesters.length?[..._behaviorMeta.semesters]:[];
       _selectedSemester="all";_selectedCluster="P0";_passFilter="all";_semesterFilterNote=null;
+      _invalidateComputeCache();  // WARN-1：資料重載時清除快取
       _renderBehaviorMetaStrip();
       _renderControls(controlsId);
       renderClusterSummary("clusterSummaryCards");
@@ -170,6 +175,7 @@ const BehaviorRadarTab = (() => {
 
   function onYearChange(semester){
     _selectedSemester=semester;
+    _invalidateComputeCache();  // WARN-1：學期切換時清除快取
     const base=_radarData?._base||_radarData;
     if(semester==="all"){
       _behaviorStudents=_allStudents;
@@ -212,16 +218,22 @@ const BehaviorRadarTab = (() => {
   }
 
   function _computeFromStudents(clusterKey,passKey,dims){
+    // WARN-1：快取命中時直接回傳，避免全量掃描
+    const cacheKey=`${clusterKey}|${passKey}|${_selectedSemester}`;
+    if(_computeCache.has(cacheKey))return _computeCache.get(cacheKey);
+
     const students=_behaviorStudents;if(!students||!students.length)return null;
     const filtered=students.filter(s=>{
       if(clusterKey!=="P0"&&s.cluster!==clusterKey)return false;
       if(passKey!=="all"){const sc=s.final_score??s.semester_score??null;const scNum=Number(sc);const isPassing=Number.isFinite(scNum)&&scNum>=60;if(passKey==="pass"&&!isPassing)return false;if(passKey==="fail"&&isPassing)return false;}
       return true;
     });
-    if(!filtered.length)return null;
+    if(!filtered.length){_computeCache.set(cacheKey,null);return null;}
     const sums=dims.map(()=>0),cnts=dims.map(()=>0);
     for(const s of filtered){const feats=s.features||{};dims.forEach((d,i)=>{const fk=DIM_FEATURE_MAP[d]||d.toLowerCase();const v=Number(feats[fk]??feats[d]??feats[d.toLowerCase()]);if(Number.isFinite(v)){sums[i]+=v;cnts[i]+=1;}});}
-    return{count:filtered.length,values:dims.map((_,i)=>cnts[i]?sums[i]/cnts[i]:0)};
+    const result={count:filtered.length,values:dims.map((_,i)=>cnts[i]?sums[i]/cnts[i]:0)};
+    _computeCache.set(cacheKey,result);
+    return result;
   }
 
   function _getPassBenchmark(dims){
@@ -294,7 +306,9 @@ const BehaviorRadarTab = (() => {
   function _renderChart(canvasId,labels,datasets){
     const canvas=document.getElementById(canvasId);if(!canvas)return;
     canvas.style.display="";canvas.parentElement?.querySelector(".behavior-empty-message")?.remove();
-    if(_radarChart){_radarChart.destroy();_radarChart=null;}
+    // BUG-1 修正：透過 ChartRegistry 統一管理，防止例外洩漏
+    ChartRegistry.destroyById(canvasId);
+    _radarChart=null;
     const _gridColor=_isDark()?'rgba(180,185,210,0.20)':'rgba(0,0,0,0.08)';
     const _angleColor=_isDark()?'rgba(180,185,210,0.30)':'rgba(0,0,0,0.15)';
     const _labelColor=_isDark()?'rgba(190,195,220,0.85)':'rgba(60,65,90,0.85)';
@@ -308,6 +322,7 @@ const BehaviorRadarTab = (() => {
     const _pointLblFontSz=_isMobile?10:12;
     const _tickFontSz=_isMobile?9:10;
     _radarChart=new Chart(canvas.getContext("2d"),{type:"radar",data:{labels,datasets},options:{responsive:true,maintainAspectRatio:false,layout:{padding:_layoutPad},scales:{r:{min:0,max:1,grid:{color:_gridColor},angleLines:{color:_angleColor},pointLabels:{color:_labelColor,font:{size:_pointLblFontSz}},ticks:{stepSize:0.2,color:_tickColor,backdropColor:'transparent',callback:v=>`${Math.round(v*100)}%`,font:{size:_tickFontSz}}}},plugins:{legend:{position:"bottom",align:"center",labels:{boxWidth:_legendBox,boxHeight:_isMobile?10:12,font:{size:_legendFontSz,weight:"600"},padding:_legendPad}},tooltip:{mode:"nearest",intersect:true,callbacks:{title:ctx=>ctx.length?`📊 ${ctx[0].label}`:"",label:ctx=>` ${ctx.dataset.label.split("（")[0]}：${(ctx.raw*100).toFixed(1)}%`,afterBody:ctx=>{if(!ctx.length)return[];const sorted=[...ctx].sort((a,b)=>b.raw-a.raw),dl=ctx[0].label;return[`🏆 ${dl} 排名：`,...sorted.map((c,i)=>`  ${RANK_MEDALS[i]??`${i+1}.`} ${c.dataset.label.split("（")[0]}：${(c.raw*100).toFixed(1)}%`)];},footer:ctx=>{if(!ctx.length)return[];const l=["👥 人數："];ctx.forEach(c=>{const m=c.dataset.label.match(/n=(\d+)/);if(m)l.push(`  ${c.dataset.label.split("（")[0]}：${m[1]} 人`);});return l;}}}}}});
+    ChartRegistry.register(canvasId, _radarChart);  // BUG-1：登記至 Registry
   }
 
   // 依目前篩選狀態計算某群人數（模組層級，避免每次 render 重建）
@@ -529,10 +544,18 @@ const BehaviorRadarTab = (() => {
     const csv="\uFEFF"+[header,...rows].join("\r\n");
     const blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
     const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url;a.download=`${_selectedCluster}_students_${_selectedSemester==="all"?"all":_selectedSemester}.csv`;
-    document.body.appendChild(a);a.click();document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // BUG-2 修正：加 display:none 避免短暫顯示；用 rAF 確保 click 完成後再移除
+    const a=Object.assign(document.createElement("a"),{
+      href:url,
+      download:`${_selectedCluster}_students_${_selectedSemester==="all"?"all":_selectedSemester}.csv`,
+      style:"display:none",
+    });
+    document.body.appendChild(a);
+    a.click();
+    requestAnimationFrame(()=>{
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
   }
 
   function resetFilters(){

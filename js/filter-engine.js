@@ -272,9 +272,42 @@ const FilterEngine = (() => {
   // § 4  規則三：學期 + 學制 + 課程類型 → 班級清單
   // ════════════════════════════════════════════════════════
 
+  // ── 反查索引（BUG-1 修正：O(n×m) → O(班級數)）──────────
+  let _classIndex = null;  // Map<key, {sheetName, program, type, semester, count, isRetaker}>
+
+  /**
+   * 建立班級反查索引（一次性 O(n×m)，DATA 載入後呼叫一次即可）
+   * 呼叫方：index.html loadData() 完成後執行 FilterEngine.buildIndex(DATA)
+   * @param {object} data  全域 DATA 物件
+   */
+  function buildIndex(data) {
+    if (!data?.students) { _classIndex = new Map(); return; }
+    const tmp = new Map();
+    Object.values(data.students).forEach(info => {
+      (info.records || []).forEach(rec => {
+        const sn = _normalizeSheetName(rec.sheet_name || '');
+        if (!sn) return;
+        const baseProgram = getProgram(sn);
+        const recProgram  = isRetakeStudent(rec, baseProgram) ? 'retake_student' : (baseProgram || 'unknown');
+        const recType     = rec.type || 'theory';
+        const sem         = String(rec.semester || '');
+        const key         = `${sem}|${sn}|${recType}`;
+        if (!tmp.has(key)) {
+          tmp.set(key, {
+            sheetName: sn, program: recProgram, type: recType,
+            semester: sem, count: 0, isRetaker: recProgram === 'retake_student',
+          });
+        }
+        tmp.get(key).count++;
+      });
+    });
+    _classIndex = tmp;
+    console.debug(`[FilterEngine] buildIndex 完成：${_classIndex.size} 個班級-學期-類型組合`);
+  }
+
   /**
    * 從全量記錄中，依三個條件過濾出可用班級清單
-   * 班級清單來源：直接從 DATA（全域 data.json）動態計算，確保與實際資料一致
+   * BUG-1 修正：有索引時使用 _classIndex（O(班級數)）；無索引時 fallback 至原始全量掃描
    *
    * @param {string}   semester      'all' | '1141' 等
    * @param {string}   program       'all' | '2yr_gen' | ...
@@ -282,75 +315,59 @@ const FilterEngine = (() => {
    * @param {object}   data          全域 DATA 物件（傳入避免直接存取全域）
    * @param {boolean}  includeRetaker  是否包含重修生（規則五）
    * @returns {Array<{sheetName: string, program: string, count: number, type: string}>}
-   *   依學制排序、班名排序
    */
   function getAvailableClasses(semester, program, courseType, data, includeRetaker = true) {
-    if (!data?.students) return [];
-
-    // 學期合法性（規則一）：若目前 program 在此學期不可用，直接回空
-    if (program && program !== 'all' && !isProgramAvailable(semester, program)) {
-      return [];
-    }
-
-    // 課程類型合法性（規則二）
+    // 規則一：學期合法性
+    if (program && program !== 'all' && !isProgramAvailable(semester, program)) return [];
+    // 規則二：課程類型合法性
     if (program && program !== 'all' && courseType && courseType !== 'all') {
-      const avail = getTypeAvailability(program);
-      if (!avail[courseType]) return [];
+      if (!getTypeAvailability(program)[courseType]) return [];
     }
 
-    // 逐筆統計
-    const classMap = new Map();  // key: `${sheetName}|${type}` → { sheetName, program, type, count }
-
-    Object.values(data.students).forEach(info => {
-      (info.records || []).forEach(rec => {
-        const sn = _normalizeSheetName(rec.sheet_name || '');
-        if (!sn) return;
-
-        const baseProgram = getProgram(sn);
-        const recProgram = isRetakeStudent(rec, baseProgram)
-          ? 'retake_student'
-          : (baseProgram || 'unknown');
-
-        // 重修生過濾（規則五）
-        if (!includeRetaker && recProgram === 'retake_student') return;
-
-        // 學期篩選
-        if (semester && semester !== 'all') {
-          if (String(rec.semester || '') !== String(semester)) return;
-        }
-
-        // 規則一：此班的 program 在目前學期是否可用
-        if (!isProgramAvailable(semester, recProgram)) return;
-
-        // 學制篩選
-        if (program && program !== 'all') {
-          if (recProgram !== program) return;
-        }
-
-        // 課程類型篩選
-        const recType = rec.type || 'theory';
-        if (courseType && courseType !== 'all') {
-          if (recType !== courseType) return;
-        }
-
-        // 規則二：此 program 是否允許此 type
-        if (!getTypeAvailability(recProgram)[recType]) return;
-
-        const key = `${sn}|${recType}`;
-        if (!classMap.has(key)) {
-          classMap.set(key, { sheetName: sn, program: recProgram, type: recType, count: 0 });
-        }
-        classMap.get(key).count++;
-      });
-    });
-
-    // 排序：學制排序 → 班名排序
-    return [...classMap.values()].sort((a, b) => {
+    const _sort = arr => arr.sort((a, b) => {
       const pa = PROGRAM_ORDER.indexOf(a.program);
       const pb = PROGRAM_ORDER.indexOf(b.program);
       if (pa !== pb) return pa - pb;
       return a.sheetName.localeCompare(b.sheetName, 'zh-TW');
     });
+
+    // ── 有索引：O(班級數) 快速路徑 ────────────────────────
+    if (_classIndex) {
+      const result = [];
+      for (const [, entry] of _classIndex) {
+        if (!includeRetaker && entry.isRetaker) continue;
+        if (semester && semester !== 'all' && entry.semester !== semester) continue;
+        if (!isProgramAvailable(semester, entry.program)) continue;
+        if (program && program !== 'all' && entry.program !== program) continue;
+        if (courseType && courseType !== 'all' && entry.type !== courseType) continue;
+        if (!getTypeAvailability(entry.program)[entry.type]) continue;
+        result.push(entry);
+      }
+      return _sort(result);
+    }
+
+    // ── 無索引：原始全量掃描 fallback ─────────────────────
+    if (!data?.students) return [];
+    const classMap = new Map();
+    Object.values(data.students).forEach(info => {
+      (info.records || []).forEach(rec => {
+        const sn = _normalizeSheetName(rec.sheet_name || '');
+        if (!sn) return;
+        const baseProgram = getProgram(sn);
+        const recProgram = isRetakeStudent(rec, baseProgram) ? 'retake_student' : (baseProgram || 'unknown');
+        if (!includeRetaker && recProgram === 'retake_student') return;
+        if (semester && semester !== 'all' && String(rec.semester || '') !== String(semester)) return;
+        if (!isProgramAvailable(semester, recProgram)) return;
+        if (program && program !== 'all' && recProgram !== program) return;
+        const recType = rec.type || 'theory';
+        if (courseType && courseType !== 'all' && recType !== courseType) return;
+        if (!getTypeAvailability(recProgram)[recType]) return;
+        const key = `${sn}|${recType}`;
+        if (!classMap.has(key)) classMap.set(key, { sheetName: sn, program: recProgram, type: recType, count: 0 });
+        classMap.get(key).count++;
+      });
+    });
+    return _sort([...classMap.values()]);
   }
 
   /**
@@ -582,6 +599,7 @@ const FilterEngine = (() => {
     allowsPracticum,
 
     // § 4  規則三
+    buildIndex,          // BUG-1：資料載入後呼叫一次以建立索引
     getAvailableClasses,
     getClassCount,
 

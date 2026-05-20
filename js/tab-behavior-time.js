@@ -152,11 +152,14 @@ const BehaviorTimeTab = (() => {
         BehaviorLoader.load.time(),
       ]);
       _allSemesters = _availableSemesters();
-      _rowCache = { all: _studentRows(false), filtered: null };
-      _rowCache.filtered = _filterRows(_rowCache.all);
+      // BUG-1 修正：明確兩步驟賦值，避免 _filterRows 拋出時 _rowCache.filtered 保持 null 的競態
+      const allRows = _studentRows(false);
+      const filteredRows = _filterRows(allRows);
+      _rowCache = { all: allRows, filtered: filteredRows };
       _renderFilterBar();
       _renderAll();
     } catch (err) {
+      _rowCache = null;  // 確保失敗時快取不含部分資料
       BehaviorLoader.showError("tab-time", err.message);
     } finally {
       BehaviorLoader.setLoading("tab-time", false);
@@ -403,8 +406,7 @@ const BehaviorTimeTab = (() => {
     const semAvg         = validAttempts.reduce((a, b) => a + b, 0) / (validAttempts.length || 1);
     const maxStudents    = Math.max(...activeStudents.filter(v => v != null), 1);
 
-    if (_charts.weeklyQuiz) _charts.weeklyQuiz.destroy();
-
+    ChartRegistry.destroyById(canvasId);  // BUG-2：整合 ChartRegistry
     _charts.weeklyQuiz = new Chart(canvas.getContext("2d"), {
       type: "line",
       plugins: [examLinePlugin],
@@ -457,6 +459,7 @@ const BehaviorTimeTab = (() => {
         },
       },
     });
+    ChartRegistry.register(canvasId, _charts.weeklyQuiz);  // BUG-T1：登記至 Registry
   }
 
   function _periodValues(row, exam) {
@@ -478,7 +481,22 @@ const BehaviorTimeTab = (() => {
   }
 
   function _calcP15(exam) {
-    const all = _getRowCache().all;   // 使用快取，避免重複 join
+    // Phase D：優先讀 ETL 預聚合 segment_stats
+    const segKey   = _segmentKey();
+    const p15Field = exam === "midterm" ? "p15_midterm" : "p15_final";
+    const segStats = _timeData?.segment_stats;
+    if (segStats) {
+      // 完整 key 命中
+      if (segStats[segKey]?.[p15Field] != null) return segStats[segKey][p15Field];
+      // 單維 fallback：只篩了一個維度時嘗試對應單維 key
+      const [sem, cluster, pass] = segKey.split("|");
+      if (sem !== "all" && cluster === "all" && pass === "all" && segStats[segKey]?.[p15Field] != null)
+        return segStats[segKey][p15Field];
+      // 全量 fallback
+      if (segStats["all|all|all"]?.[p15Field] != null) return segStats["all|all|all"][p15Field];
+    }
+    // fallback：原始即時排序計算
+    const all = _getRowCache().all;
     const periods = all.map(r => _periodValues(r, exam).period).filter(v => v > 0).sort((a, b) => a - b);
     if (!periods.length) return 0;
     const idx = Math.floor(periods.length * 0.15);
@@ -496,7 +514,7 @@ const BehaviorTimeTab = (() => {
     const finalCounts = PREP_TYPES.map(t => rows.filter(r => _prepType(r, "final",   p15Final)  === t.key).length);
     const allCounts   = [...midCounts, ...finalCounts];
     _renderPreExamSummary(canvas, rows, allCounts, p15Mid, p15Final);
-    if (_charts.preExam) _charts.preExam.destroy();
+    ChartRegistry.destroyById(canvasId);  // BUG-2：整合 ChartRegistry
     _charts.preExam = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
       data: {
@@ -523,6 +541,7 @@ const BehaviorTimeTab = (() => {
         },
       },
     });
+    ChartRegistry.register(canvasId, _charts.preExam);  // BUG-T1：登記至 Registry
   }
 
   function _renderPreExamSummary(canvas, rows, counts, p15Mid, p15Final) {
@@ -632,7 +651,7 @@ const BehaviorTimeTab = (() => {
         `<label style="display:flex;align-items:center;gap:3px;flex-shrink:0">✅ <select id="tsDonutPassFilter" onchange="BehaviorTimeTab.onFilterChange(this.id)" style="${selectStyle}">${passOptions}</select></label>` +
         `</div>`;
     }
-    if (_charts.timeSlot) _charts.timeSlot.destroy();
+    ChartRegistry.destroyById(canvasId);  // BUG-2：整合 ChartRegistry
     _charts.timeSlot = new Chart(canvas.getContext("2d"), {
       type: "doughnut",
       data: {
@@ -657,6 +676,7 @@ const BehaviorTimeTab = (() => {
         },
       },
     });
+    ChartRegistry.register(canvasId, _charts.timeSlot);  // BUG-T1：登記至 Registry
   }
 
   // ────────────────────────────────────────────────────────────
@@ -678,13 +698,22 @@ const BehaviorTimeTab = (() => {
     const rows = _filteredStudentRows();
     if (!rows.length) { el.innerHTML = ""; return; }
 
-    const avgLateNight = _avg(rows.map(r => r.late_night_ratio));
-
-    const scoredRows  = rows.filter(r => r.final_score != null || r.semester_score != null);
-    const scoreValues = scoredRows.map(r => _num(r.final_score ?? r.semester_score));
-    const avgScore    = scoreValues.length
-      ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length
-      : null;
+    // Phase D：優先讀 ETL 預聚合 segment_stats
+    let avgLateNight, avgScore;
+    const segKey  = _segmentKey();
+    const segData = _timeData?.segment_stats?.[segKey];
+    if (segData) {
+      avgLateNight = segData.late_night_ratio_mean ?? 0;
+      avgScore     = segData.avg_score ?? null;
+    } else {
+      // fallback：即時計算（原有邏輯）
+      avgLateNight = _avg(rows.map(r => r.late_night_ratio));
+      const scoredRows  = rows.filter(r => r.final_score != null || r.semester_score != null);
+      const scoreValues = scoredRows.map(r => _num(r.final_score ?? r.semester_score));
+      avgScore = scoreValues.length
+        ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length
+        : null;
+    }
     const lateNightPct = (avgLateNight * 100).toFixed(1);
 
     let icon, color, borderColor, title, message;
@@ -744,13 +773,20 @@ const BehaviorTimeTab = (() => {
       // 無篩選：直接用 ETL 預聚合（最快）
       heatmapData = _timeData.class_heatmap_matrix.raw;
     } else {
-      // 有篩選：從 students[] 加總
-      const rows = _filteredStudentRows();
-      rows.forEach(r => {
-        Object.entries(r.heatmapRaw || {}).forEach(([key, val]) => {
-          heatmapData[key] = (heatmapData[key] || 0) + val;
+      // Phase D：有篩選時，優先讀 segment_stats 預聚合
+      const segKey  = _segmentKey();
+      const segData = _timeData?.segment_stats?.[segKey];
+      if (segData?.heatmap_raw) {
+        heatmapData = segData.heatmap_raw;
+      } else {
+        // fallback：從 students[] 加總（原有邏輯）
+        const rows = _filteredStudentRows();
+        rows.forEach(r => {
+          Object.entries(r.heatmapRaw || {}).forEach(([key, val]) => {
+            heatmapData[key] = (heatmapData[key] || 0) + val;
+          });
         });
-      });
+      }
     }
 
     // 計算最大值（正規化色階）
@@ -861,11 +897,21 @@ const BehaviorTimeTab = (() => {
     if (isAllFilter && _timeData.class_avg_hourly_distribution?.normalized) {
       classNorm = _timeData.class_avg_hourly_distribution.normalized;
     } else {
-      const rows = _filteredStudentRows();
-      const acc  = Array(24).fill(0);
-      rows.forEach(r => (r.hourlyRaw || []).forEach((v, h) => { acc[h] += v; }));
-      const total = acc.reduce((a, b) => a + b, 0);
-      classNorm = total > 0 ? acc.map(v => v / total) : Array(24).fill(0);
+      // Phase D：有篩選時，優先讀 segment_stats 預聚合
+      const segKey  = _segmentKey();
+      const segData = _timeData?.segment_stats?.[segKey];
+      if (segData?.hourly_raw?.length) {
+        const raw   = segData.hourly_raw;
+        const total = raw.reduce((a, b) => a + b, 0);
+        classNorm = total > 0 ? raw.map(v => v / total) : Array(24).fill(0);
+      } else {
+        // fallback：從 students[] 即時加總（原有邏輯）
+        const rows = _filteredStudentRows();
+        const acc  = Array(24).fill(0);
+        rows.forEach(r => (r.hourlyRaw || []).forEach((v, h) => { acc[h] += v; }));
+        const total = acc.reduce((a, b) => a + b, 0);
+        classNorm = total > 0 ? acc.map(v => v / total) : Array(24).fill(0);
+      }
     }
 
     // 分群（只在無篩選時使用 ETL 預聚合；有篩選時暫不疊加，避免與篩選邏輯衝突）
@@ -909,7 +955,7 @@ const BehaviorTimeTab = (() => {
       }
     }
 
-    if (_charts.hourlyLine) _charts.hourlyLine.destroy();
+    ChartRegistry.destroyById(canvasId);  // BUG-2：整合 ChartRegistry
     _charts.hourlyLine = new Chart(canvas.getContext("2d"), {
       type: "line",
       plugins: [_noExamLinesPlugin],
@@ -942,6 +988,7 @@ const BehaviorTimeTab = (() => {
         },
       },
     });
+    ChartRegistry.register(canvasId, _charts.hourlyLine);  // BUG-T1：登記至 Registry
   }
 
   // ── 公開 API ─────────────────────────────────────────────────
