@@ -2192,11 +2192,46 @@ body.light .behavior-range-badge {
     <div id="rCohortSummary" style="display:flex;gap:12px;flex-wrap:wrap;padding:16px 0 8px"></div>
 
     <!-- §5.3 六維度雷達圖 -->
-    <div style="margin:16px 0">
+    <div style="margin:16px 0;position:relative">
       <h3 style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;
-                 display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                 display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:relative">
         <span>學習特徵雷達圖</span>
         <span style="font-size:11px;font-weight:400;color:var(--text-dim)">（正規化 0–100，全體學生為基準）</span>
+        <!-- 雷達圖說明按鈕 -->
+        <button class="chart-info-btn" id="rRadarInfoBtn"
+          onclick="toggleRRadarInfo(event)"
+          title="查看雷達圖說明">?</button>
+        <!-- 雷達圖說明 Popover -->
+        <div class="chart-popover" id="rRadarInfoPanel" style="width:360px;left:0;top:calc(100% + 6px)">
+          <div class="chart-popover-title">📡 學習特徵雷達圖 — 分析原則
+            <button class="chart-popover-close" onclick="document.getElementById('rRadarInfoPanel').classList.remove('open')">×</button>
+          </div>
+          <div style="font-size:12px;color:var(--text-mid);line-height:1.8">
+            <strong style="color:var(--accent)">【圖表用途】</strong><br>
+            比較「及格組」與「不及格組」學生在六個學習行為維度上的差異，幫助識別哪些行為與考試通過率有關。<br><br>
+            <strong style="color:var(--accent)">【六個維度說明】</strong>
+            <ul style="margin:4px 0 8px 0;padding-left:16px;color:var(--text-mid);font-size:11px">
+              <li><b>TXT 教材完成率</b>：講義、文字閱讀材料的完成比例</li>
+              <li><b>SUP 解鎖教材</b>：需達門檻才能解鎖的補充教材（如整理筆記、動畫解析）完成比例</li>
+              <li><b>TUT 輔導資源</b>：課輔、解題影片等輔導類資源的使用程度</li>
+              <li><b>考前學習強度</b>：期末考前 7 天內的學習量佔整學期總量的比例</li>
+              <li><b>學習穩定性</b>：每週是否持續有學習活動（零活動週越少，穩定性分數越高）</li>
+              <li><b>AUD 音頻時數</b>：音檔、語音講解等聽覺教材的累積使用時間</li>
+            </ul>
+            <strong style="color:var(--accent)">【數值如何計算？】</strong><br>
+            每個維度取「該組學生的中位數原始值」，再以全體學生中位數為基準做<b>正規化</b>，換算到 0–100 的分數：
+            <ul style="margin:4px 0 8px 0;padding-left:16px;color:var(--text-mid);font-size:11px">
+              <li>100 分 = 表現等同全體中位數的 2 倍（最高值）</li>
+              <li>50 分 = 表現等同全體中位數（平均水準）</li>
+              <li>0 分 = 幾乎未使用該資源</li>
+            </ul>
+            <strong style="color:var(--accent)">【如何讀圖？】</strong><br>
+            • <span style="color:#27ae60;font-weight:600">綠色區域（及格組）</span>越大，代表及格學生在該維度投入越多。<br>
+            • <span style="color:#e74c3c;font-weight:600">紅色區域（不及格組）</span>縮小的維度，就是不及格學生明顯不足的行為。<br>
+            • 兩組差距越大的維度，越值得課程設計介入或預警干預。<br><br>
+            <span style="color:var(--text-dim);font-size:11px">點擊上方「不及格人數」或「及格人數」卡片，可單獨聚焦顯示該組雷達線。</span>
+          </div>
+        </div>
         <button id="rRadarClearBtn" onclick="AtRiskReportManager.filterRadar(null)"
           style="display:none;margin-left:auto;font-size:11px;padding:2px 10px;
                  border:1px solid var(--border,#ccc);border-radius:20px;
@@ -7048,37 +7083,78 @@ const AtRiskReportManager = (() => {
     // 低完成率紅旗
     (bm?.low_completion_flags ?? []).forEach(f => {
       const labelMap = {
-        text_material_completion: 'TXT 教材完成率',
-        supplementary_completion: 'SUP 門檻解鎖教材',
-        tutoring_resource_rate:   'TUT 輔導資源',
+        text_material_completion: 'TXT 文字教材',
+        supplementary_completion: 'SUP 門檻解鎖教材（補充筆記／動畫解析）',
+        tutoring_resource_rate:   'TUT 輔導資源（課輔／解題影片）',
       };
+      const metricName = labelMap[f.metric] ?? f.metric;
+      const threshold  = f.threshold_pct;
+      const failPct    = (f.ratio_in_fail_group * 100).toFixed(0);
+      const passPct    = (f.ratio_in_pass_group * 100).toFixed(0);
+      const failAbove  = 100 - Number(failPct);
+      const gapPct     = (Number(failPct) - Number(passPct)).toFixed(0);
+
+      const body =
+        `🔎 門檻定義：完成率低於 ${threshold}% 即視為「未達標」。\n\n` +
+        `📊 不及格組：有 ${failPct}% 的不及格學生完成率低於 ${threshold}%，` +
+        `也就是說這群學生中，每 100 人就有約 ${failPct} 人未達標，` +
+        `僅 ${failAbove} 人有完成到門檻以上。\n\n` +
+        `📊 及格組：也有 ${passPct}% 的及格學生完成率低於 ${threshold}%，` +
+        `代表及格組同樣有 ${passPct} 人未達標（但比例遠低於不及格組）。\n\n` +
+        `💡 解讀：兩組都有人低於門檻，但不及格組的比例（${failPct}%）遠高於及格組（${passPct}%），` +
+        `差距 ${gapPct} 個百分點，顯示「${metricName}不足」是不及格的顯著風險因子。`;
+
       flags.push({
         icon: '⚠️',
-        title: `${labelMap[f.metric] ?? f.metric} 完成率低於 ${f.threshold_pct}%`,
-        body: `不及格組 ${(f.ratio_in_fail_group*100).toFixed(0)}% 學生低於門檻，及格組僅 ${(f.ratio_in_pass_group*100).toFixed(0)}%。`,
+        title: `${metricName} 完成率偏低警示（門檻：${threshold}%）`,
+        body,
         color: '#e74c3c',
+        multiline: true,
       });
     });
 
     // 連續零活動紅旗
     const czw = td?.available ? td.consecutive_zero_weeks : null;
     if (czw?.fail_group_median >= 2) {
+      const failMed = czw.fail_group_median;
+      const passMed = czw.pass_group_median ?? 0;
+      const diff = failMed - passMed;
+      const body =
+        `🔎 「連續零活動週」是指學生連續數週完全沒有任何學習記錄（登入、閱讀、作答等均為零）。` +
+        `\n\n` +
+        `📊 不及格組：中位數為 ${failMed} 週，代表有一半以上的不及格學生，整學期累計有至少 ${failMed} 週完全沒有學習活動。` +
+        `\n\n` +
+        `📊 及格組：中位數為 ${passMed} 週，比不及格組少約 ${diff} 週的停擺期，學習連續性明顯較好。` +
+        `\n\n` +
+        `💡 解讀：「學習中斷」是不及格的重要預警信號。建議在學生連續 2 週無活動時，主動發出提醒或課輔邀請。`;
       flags.push({
         icon: '🔴',
-        title: `連續零活動週：不及格組中位數 ${czw.fail_group_median} 週`,
-        body: `及格組中位數為 ${czw.pass_group_median} 週。`,
+        title: `學習中斷警示：不及格組平均連續停擺 ${failMed} 週（及格組僅 ${passMed} 週）`,
+        body,
         color: '#e67e22',
+        multiline: true,
       });
     }
 
     // 期中後衰退紅旗
     const decayFail = td?.available ? td.post_midterm_decay_rate?.fail_group_median_pct : null;
     if (decayFail != null && decayFail <= -35) {
+      const absDecayFail = Math.abs(decayFail).toFixed(1);
+      const absDecayPass = Math.abs(td.post_midterm_decay_rate?.pass_group_median_pct ?? 0).toFixed(1);
+      const body =
+        `🔎 「期中後學習衰退率」是比較每位學生「期中考後」與「期中考前」的週平均學習分鐘數，計算下降幅度（百分比）。負值代表學習量減少。` +
+        `\n\n` +
+        `📊 不及格組：中位數衰退幅度為 ${absDecayFail}%，代表有一半以上的不及格學生，在期中考結束後學習量掉了將近 ${absDecayFail}%。這是相當顯著的學習崩潰跡象。` +
+        `\n\n` +
+        `📊 及格組：同期衰退幅度為 ${absDecayPass}%，雖然也有下降，但幅度明顯小於不及格組。` +
+        `\n\n` +
+        `💡 解讀：不及格組在期中考後的大幅衰退，可能反映學生「看到成績不佳後放棄」或「期中前的衝刺無法持續」。建議在期中考後主動發出個人化的學習鼓勵，並提供補救資源。`;
       flags.push({
         icon: '📉',
-        title: `期中考後學習量衰退 ${Math.abs(decayFail).toFixed(1)}%`,
-        body: `不及格組期中考後活動量顯著下降，及格組衰退 ${Math.abs(td.post_midterm_decay_rate?.pass_group_median_pct ?? 0).toFixed(1)}%。`,
+        title: `期中考後學習量大幅衰退：不及格組下降 ${absDecayFail}%（及格組僅下降 ${absDecayPass}%）`,
+        body,
         color: '#8e44ad',
+        multiline: true,
       });
     }
 
@@ -7090,12 +7166,12 @@ const AtRiskReportManager = (() => {
     el.innerHTML = `<h3 style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px">🚩 紅旗警示</h3>` +
       flags.map(f => `
         <div style="display:flex;gap:10px;align-items:flex-start;background:var(--card-bg,#fff);
-                    border-left:4px solid ${escapeHtml(f.color)};border-radius:6px;padding:10px 14px;margin-bottom:8px;
-                    box-shadow:0 1px 3px rgba(0,0,0,0.06)">
-          <span style="font-size:18px;line-height:1.4">${escapeHtml(f.icon)}</span>
-          <div>
-            <div style="font-size:13px;font-weight:600;color:${escapeHtml(f.color)}">${escapeHtml(f.title)}</div>
-            <div style="font-size:12px;color:var(--text-dim,#888);margin-top:2px">${escapeHtml(f.body)}</div>
+                    border-left:4px solid ${escapeHtml(f.color)};border-radius:6px;padding:12px 16px;margin-bottom:12px;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.08)">
+          <span style="font-size:20px;line-height:1.4;flex-shrink:0">${escapeHtml(f.icon)}</span>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;font-weight:700;color:${escapeHtml(f.color)};margin-bottom:6px">${escapeHtml(f.title)}</div>
+            <div style="font-size:12px;color:var(--text-mid,#555);line-height:1.75;${f.multiline ? 'white-space:pre-line' : ''}">${escapeHtml(f.body)}</div>
           </div>
         </div>`).join('');
   }
@@ -7142,6 +7218,12 @@ const AtRiskReportManager = (() => {
     setTimeout(() => document.getElementById('__rPrintStyle')?.remove(), 1000);
   };
 
+  // ── 雷達圖說明按鈕 toggle ────────────────────────────────────
+  window.toggleRRadarInfo = function(e) {
+    e.stopPropagation();
+    document.getElementById('rRadarInfoPanel')?.classList.toggle('open');
+  };
+
   // ── bStats 說明彈出面板 ──────────────────────────────────────
   window.toggleBStatsHelp = function(e) {
     e.stopPropagation();
@@ -7154,6 +7236,12 @@ const AtRiskReportManager = (() => {
     const btn   = document.getElementById('bStatsHelpBtn');
     if (panel && panel.style.display !== 'none' && !panel.contains(e.target) && e.target !== btn) {
       panel.style.display = 'none';
+    }
+    // 雷達圖說明 popover：點外部關閉
+    const rPanel = document.getElementById('rRadarInfoPanel');
+    const rBtn   = document.getElementById('rRadarInfoBtn');
+    if (rPanel && rPanel.classList.contains('open') && !rPanel.contains(e.target) && e.target !== rBtn) {
+      rPanel.classList.remove('open');
     }
   });
 
